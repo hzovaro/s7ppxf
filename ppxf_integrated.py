@@ -31,8 +31,8 @@ from ppxf.ppxf import ppxf
 import ppxf.ppxf_util as util
 
 from cosmocalc import get_dist
-from SSP_analysis.log_rebin_errors import log_rebin_errors
-from SSP_analysis.ppxf_plot import ppxf_plot
+from log_rebin_errors import log_rebin_errors
+from ppxf_plot import ppxf_plot
 
 from IPython.core.debugger import Tracer
 

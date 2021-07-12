@@ -34,8 +34,8 @@ from vorbin.voronoi_2d_binning import voronoi_2d_binning
 
 from cosmocalc import get_dist
 from plotting_fns import plot_maps
-from SSP_analysis.log_rebin_errors import log_rebin_errors
-from SSP_analysis.ppxf_plot import ppxf_plot
+from log_rebin_errors import log_rebin_errors
+from ppxf_plot import ppxf_plot
 
 from IPython.core.debugger import Tracer
 
@@ -175,7 +175,8 @@ c_km_s = constants.c / 1e3
 vel = c_km_s * np.log(1 + z) # Starting guess for systemic velocity (eq.(8) of Cappellari (2017))
 
 # Extinction
-A_V_Gal = 0.0  # S&F2011 - https://irsa.ipac.caltech.edu/cgi-bin/bgTools/nph-bgExec
+t = IrsaDust.get_extinction_table(obj_name)
+A_V_Gal = t[2]["A_SandF"]  # S&F2011 - https://irsa.ipac.caltech.edu/cgi-bin/bgTools/nph-bgExec
 
 ##############################################################################
 # ppxf parameters
