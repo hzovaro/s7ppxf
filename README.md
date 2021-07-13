@@ -1,5 +1,5 @@
 # s7ppxf
-Scripts for analysing the stellar populations of galaxies in the S7 sample. The details of the ``ppxf`` implementation can be found in [Zovaro et al. 2020](https://ui.adsabs.harvard.edu/abs/2020MNRAS.499.4940Z/abstract)
+Scripts for analysing the stellar populations of galaxies in the S7 sample. The details of the ``ppxf`` implementation can be found in [Zovaro et al. 2020](https://ui.adsabs.harvard.edu/abs/2020MNRAS.499.4940Z/abstract).
 
 The stellar templates provided are those of [Gonzales Delgado](https://www.iaa.csic.es/~rosa/research/synthesis/HRES/ESPS-HRES.html). Both Geneva and Padova isochrones are included.
 
