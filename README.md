@@ -19,8 +19,14 @@ Before running, you must define an evironment variable ``S7_DIR`` pointing to th
 
 **Data**
 
-The script required the reduced blue and red datacubes from the S7 survey. These are available here: https://miocene.anu.edu.au/S7/
+The script requires the reduced blue and red datacubes from the S7 survey. These are available here: https://miocene.anu.edu.au/S7/
 
 **Other information**
 
 The script ``cosmocalc.py`` contains a modified version of Ned Wright's incredibly useful Javascripy cosmology calculator: http://www.astro.ucla.edu/~wright/CosmoCalc.html 
+
+**Usage**
+
+1. Run ``merge_datacubes.py <object name>`` to merge the blue and red datacubes into a single datacube, saved into a FITS file as "<object name>_COMB.fits". 
+2. Run ``ppxf_integrated.py <object name>`` to run ``ppxf`` on a spectrum extracted from the central regions of the combined datacube (or on the red or blue datacubes - this can be configured in the script). The radius of the aperture can be modified in the script.
+  3. Run ``ppxf_binned.py <object name>`` to run ``ppxf`` on a spectra extracted from Voronoi bins made from the combined datacube (or on the red or blue datacubes). The minimum continuum S/N of the bins can be modified in the script using the variable ``target_SN`` - larger values produce larger bins, and lower spatial resolution. I recommend a value of 60 - for most object this ensures a median continuum S/N of at least 10 in all bins, which is necessary for ``ppxf`` to produce accurate results. 
