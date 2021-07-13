@@ -14,7 +14,8 @@ The following python packages are required:
 - ``multiprocessing`` for parallel execution
 - standard scientific python packages: ``numpy``, ``scipy``, ``matplotlib`` etc.
 
-Before running, you must define an evironment variable ``S7_DIR`` pointing to the top-level directory containing the S7 data, plus other sub-folders which will throw assertion errors if not found.
+Before running, you must define an evironment variable ``S7_DIR`` pointing to the top-level directory containing the S7 data, plus other sub-folders which will throw assertion errors if not found:
+``export S7_DIR="/path/to/S7/data/"``
 
 **Data**
 
