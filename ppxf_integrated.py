@@ -22,6 +22,7 @@ from time import time
 
 from astropy.io import fits
 from astroquery.ned import Ned
+from astroquery.irsa_dust import IrsaDust
 from scipy import constants, ndimage
 import numpy as np
 import extinction
@@ -54,27 +55,43 @@ plt.ion()
 ##############################################################################
 # Object information
 obj_name = sys.argv[1]
-grating = "B3000"
-r = 5  # radius of aperture in arcsec
+grating = "COMB"
 bad_pixel_ranges_A = []  # Spectral regions to mask out (in Angstroms). format: [[lambda_1, lambda_2], ...]
 
-# Paths
-data_dir = "/priv/meggs3/u5708159/S7/" 
-ppxf_output_path = os.path.join(data_dir, "ppxf")
-fig_path =  os.path.join(ppxf_output_path, "figs") # Where to save figures
-output_fits_path =  os.path.join(ppxf_output_path, "fits")  # Path to S7 data cubes
-input_fits_path =  os.path.join(data_dir, "0_Cubes")  # Path to S7 data cubes
-input_fits_fname = "{}_B.fits".format(obj_name) if grating == "B3000" else "{}_R.fits".format(obj_name)
-
-# Plotting
+# Plotting settings
 savefigs = True
 plotit = True
+
+# Binning settings
+r = 5  # radius of aperture in arcsec
 
 # ppxf options
 ngascomponents = 2  # Number of kinematic components to be fitted to the emission lines
 isochrones = "Padova"
-auto_adjust_regul = False
+auto_adjust_regul = False  # Set to False for interactive execution
 mask_NaD = False  # Whether to mask out the Na D doublet - leave False for now
+
+##############################################################################
+# Paths and filenames
+##############################################################################
+assert "S7_DIR" in os.environ, 'S7_DIR environment variable is not defined! Make sure it is defined in your .bashrc file: export S7_DIR="/path/to/s7/data/"'
+data_dir = os.environ["S7_DIR"]
+ppxf_output_path = os.path.join(data_dir, "ppxf")
+fig_path =  os.path.join(ppxf_output_path, "figs") # Where to save figures
+output_fits_path =  os.path.join(ppxf_output_path, "fits")  # Path to S7 data cubes
+input_fits_path =  os.path.join(data_dir, "0_Cubes")  # Path to S7 data cubes
+for path in [ppxf_output_path, fig_path, output_fits_path, input_fits_path]:
+    assert os.path.exists(path), "Directory {} does not exist!".format(path) 
+
+# Name of input FITS file
+assert grating in ["B3000", "R7000", "COMB"], "grating must be one of B3000, R7000 or COMB!"
+if grating == "COMB":
+    input_fits_fname = "{}_COMB.fits".format(obj_name)
+elif grating == "B3000":
+    input_fits_fname = "{}_B.fits".format(obj_name)
+elif grating == "R7000":
+    input_fits_fname = "{}_R.fits".format(obj_name)
+assert os.path.exists(os.path.join(input_fits_path, input_fits_fname)), "File {} does not exist!".format(input_fits_fname)
 
 ##############################################################################
 # For interactive execution
@@ -169,7 +186,8 @@ c_km_s = constants.c / 1e3
 vel = c_km_s * np.log(1 + z) # Starting guess for systemic velocity (eq.(8) of Cappellari (2017))
 
 # Extinction
-A_V_Gal = 0.0  # S&F2011 - https://irsa.ipac.caltech.edu/cgi-bin/bgTools/nph-bgExec
+t = IrsaDust.get_query_table(obj_name, radius="2deg")
+A_V_Gal = t["ext SandF ref"] * 3.1  # S&F 2011 A_V (= E(B-V) * 3.1)
 
 ##############################################################################
 # ppxf parameters
@@ -187,7 +205,7 @@ ncomponents = ngascomponents + 1    # number of kinematic components. 2 = stars 
 nmoments_age_met = [2 for i in range(ncomponents)]
 start_age_met = [[vel, 100.] for i in range(ncomponents)]
 fixed_age_met = [[0, 0] for i in range(ncomponents)]
-tie_balmer = True if grating == "comb" else False
+tie_balmer = True if grating == "COMB" else False
 limit_doublets = False
 
 # pPXF parameters for the stellar kinematics fit
@@ -262,7 +280,7 @@ _, lambda_vals_log, velscale =\
                        data_cube[:, 0, 0])
 
 # Instrumental resolution
-if grating == "B3000" or grating == "comb":
+if grating == "B3000" or grating == "COMB":
     FWHM_inst_A = 1.4  # as measured using sky lines in the b3000 grating
 elif grating == "R7000":
     FWHM_inst_A = 0.9
@@ -667,7 +685,7 @@ print("Elapsed time in pPXF: %.2f s" % (time() - t))
 # Reddening
 ##########################################################################
 # Calculate the A_V
-if not tie_balmer and grating == "comb":
+if not tie_balmer and grating == "COMB":
     intrinsic_ratios = {
         "Halpha/Hbeta": 2.85,
         "Hgamma/Hbeta": 0.468,
@@ -727,7 +745,7 @@ if not tie_balmer and grating == "comb":
         print("A_V = {:6.4f} +/- {:6.4f}".format(A_V, A_V_err))
         print(
             "-----------------------------------------------------------------------")
-elif tie_balmer and grating == "comb":
+elif tie_balmer and grating == "COMB":
     print("-----------------------------------------------------------------------")
     print("Estimated mean A_V for integrated spectrum using all Balmer lines (calculated by pPXF):")
     print("A_V = {:6.4f}".format(pp_age_met.gas_reddening * 3.1))
@@ -862,9 +880,9 @@ hdulist[0].header["VD_ERR"] = pp_kin.error[1]  # NOTE: unreliable error estimate
 # Gas kinematics
 for n in range(1, ncomponents):
     hdulist[0].header["VG{}".format(n)] = pp_age_met.sol[n][0]
-    hdulist[0].header["VG{}_ERR"] = pp_age_met.error[n][0]
+    hdulist[0].header["VG{}_ERR".format(n)] = pp_age_met.error[n][0]
     hdulist[0].header["VGD{}".format(n)] = pp_age_met.sol[n][1]
-    hdulist[0].header["VGD{}ERR"] = pp_age_met.error[n][1]
+    hdulist[0].header["VGD{}ERR".format(n)] = pp_age_met.error[n][1]
 
 hdulist = fits.HDUList(hdulist)
 

@@ -5,7 +5,6 @@ import sys
 import os
 from astropy.io import fits
 from astropy.wcs import WCS
-from astroquery.ned import Ned
 
 import matplotlib.pyplot as plt
 
@@ -18,25 +17,30 @@ import numpy as np
 from IPython.core.debugger import Tracer
 
 ##############################################################################
-# Open both FITS files
+# USER INPUTS
 ##############################################################################
-data_dir = "/priv/meggs3/u5708159/S7" 
-fig_path = os.path.join(data_dir, "figs/")
-fits_path = os.path.join(data_dir, "0_Cubes")
 obj_name = sys.argv[1]
 
-# get object information from NED
-n = Ned.query_object(obj_name)
-z = n["Redshift"].data[0]  # Initial estimate of the galaxy redshift
+##############################################################################
+# Paths and filenames
+##############################################################################
+assert "S7_DIR" in os.environ, 'S7_DIR environment variable is not defined! Make sure it is defined in your .bashrc file: export S7_DIR="/path/to/s7/data/"'
+data_dir = os.environ["S7_DIR"]
+fits_path =  os.path.join(data_dir, "0_Cubes")  # Path to S7 data cubes
+assert os.path.exists(fits_path), "Directory {} does not exist!".format(fits_path) 
 
-fname_b = os.path.join(fits_path, "{}_B.fits".format(obj_name))
-fname_r = os.path.join(fits_path, "{}_R.fits".format(obj_name))
+# Name of input FITS files
+assert os.path.exists(os.path.join(fits_path, "{}_B.fits".format(obj_name))), "File {} does not exist!".format("{}_B.fits".format(obj_name))
+assert os.path.exists(os.path.join(fits_path, "{}_R.fits".format(obj_name))), "File {} does not exist!".format("{}_R.fits".format(obj_name))
 
-hdulist_B3000 = fits.open(fname_b)
+##############################################################################
+# Open red & blue cubes
+##############################################################################
+hdulist_B3000 = fits.open(os.path.join(fits_path, "{}_B.fits".format(obj_name)))
 datacube_b = hdulist_B3000[0].data
 varcube_b = hdulist_B3000[1].data
 
-hdulist_R7000 = fits.open(fname_r)
+hdulist_R7000 = fits.open(os.path.join(fits_path, "{}_R.fits".format(obj_name)))
 datacube_r = hdulist_R7000[0].data
 varcube_r = hdulist_R7000[1].data
 
@@ -93,7 +97,7 @@ for rr, cc in product(range(nrows), range(ncols)):
     good_idxs = np.argwhere(~np.isnan(datacube_r[:, rr, cc]))
     # Interpolate
     tck = interpolate.splrep(lambda_vals_r_A[good_idxs], datacube_r[good_idxs, rr, cc])
-    datacube_comb[:, rr, cc] = interpolate.splev(x_0_px=lambda_vals_comb_A, tck=tck)
+    datacube_comb[:, rr, cc] = interpolate.splev(x=lambda_vals_comb_A, tck=tck)
 
 # Repeating for the variance 
 # Slightly dodgy, but can't do much better.
@@ -102,7 +106,7 @@ for rr, cc in product(range(nrows), range(ncols)):
     good_idxs = np.argwhere(~np.isnan(varcube_r[:, rr, cc]))
     # Interpolate
     tck = interpolate.splrep(lambda_vals_r_A[good_idxs], varcube_r[good_idxs, rr, cc])
-    varcube_comb[:, rr, cc] = interpolate.splev(x_0_px=lambda_vals_comb_A, tck=tck)
+    varcube_comb[:, rr, cc] = interpolate.splev(x=lambda_vals_comb_A, tck=tck)
 
 fig, axs = plt.subplots(nrows=2, ncols=1, sharex=True)
 fig.subplots_adjust(hspace=0.0)
@@ -113,6 +117,8 @@ axs[1].plot(lambda_vals_comb_A, varcube_comb[:, y_0_px, x_0_px], color="r", labe
 axs[0].set_xlim([lambda_vals_r_A[0], lambda_vals_r_A[-1]])
 axs[0].set_ylim([np.nanmin(datacube_r[:, y_0_px, x_0_px]), np.nanmax(datacube_r[:, y_0_px, x_0_px])])
 axs[1].set_ylim([np.nanmin(varcube_r[:, y_0_px, x_0_px]), np.nanmax(varcube_r[:, y_0_px, x_0_px])])
+axs[0].legend()
+axs[1].set_xlabel("Observer-frame wavelength (Angstroms)")
 plt.show()
 
 ##############################################################################
@@ -124,32 +130,33 @@ varcube_comb[:len(lambda_vals_b_A)] = varcube_b
 # Plot to check...
 fig, axs = plt.subplots(nrows=2, ncols=1, sharex=True)
 fig.subplots_adjust(hspace=0.0)
-axs[0].plot(lambda_vals_r_A / (1 + z), datacube_r[:, y_0_px, x_0_px] + 1e-15, label="R7000 (+ offset)")
-axs[0].plot(lambda_vals_b_A / (1 + z), datacube_b[:, y_0_px, x_0_px] + 1e-15, label="B3000 (+ offset)")
-axs[0].plot(lambda_vals_comb_A / (1 + z), datacube_comb[:, y_0_px, x_0_px], label="Combined")
+axs[0].plot(lambda_vals_r_A, datacube_r[:, y_0_px, x_0_px] + 1e-15, label="R7000 (+ offset)")
+axs[0].plot(lambda_vals_b_A, datacube_b[:, y_0_px, x_0_px] + 1e-15, label="B3000 (+ offset)")
+axs[0].plot(lambda_vals_comb_A, datacube_comb[:, y_0_px, x_0_px], label="Combined")
 axs[0].legend()
-axs[1].plot(lambda_vals_r_A / (1 + z), varcube_r[:, y_0_px, x_0_px] + .5e-32, label="R7000 variance (+ offset)")
-axs[1].plot(lambda_vals_b_A / (1 + z), varcube_b[:, y_0_px, x_0_px] + .5e-32, label="B3000 variance (+ offset)")
-axs[1].plot(lambda_vals_comb_A / (1 + z), varcube_comb[:, y_0_px, x_0_px], label="Combined variance")
+axs[1].plot(lambda_vals_r_A, varcube_r[:, y_0_px, x_0_px] + .5e-32, label="R7000 variance (+ offset)")
+axs[1].plot(lambda_vals_b_A, varcube_b[:, y_0_px, x_0_px] + .5e-32, label="B3000 variance (+ offset)")
+axs[1].plot(lambda_vals_comb_A, varcube_comb[:, y_0_px, x_0_px], label="Combined variance")
 axs[1].legend()
+axs[1].set_xlabel("Observer-frame wavelength (Angstroms)")
 plt.show()
 
 ##############################################################################
 # Save to file
 ##############################################################################
 # Open the individual frame to which the mosaic is aligned
-hdu_comb = fits.open(fname_b)
+hdu_comb = fits.open(os.path.join(fits_path, "{}_B.fits".format(obj_name)))
 
 # Overwrite the data with the mosiaced cubes
 hdu_comb[0].data = datacube_comb
 hdu_comb[1].data = varcube_comb
 
-hdu_comb[0].header["FILEB"] = fname_b
-hdu_comb[0].header["FILER"] = fname_r
+hdu_comb[0].header["FILEB"] = "{}_B.fits".format(obj_name)
+hdu_comb[0].header["FILER"] = "{}_R.fits".format(obj_name)
 
 # Write back to file
 hdu_comb.writeto(
-    os.path.join(fits_path, "{}_comb.fits".format(obj_name)), output_verify="ignore", overwrite=True)
+    os.path.join(fits_path, "{}_COMB.fits".format(obj_name)), output_verify="ignore", overwrite=True)
 hdu_comb.close()
 
 
