@@ -302,8 +302,13 @@ yy, xx = np.meshgrid(range(data_cube.shape[1]), range(
     data_cube.shape[2]), indexing='ij')
 
 # Mask out spaxels beyond the given radius
-x_0, y_0 = np.unravel_index(np.nanargmax(data_cube[1000]), data_cube.shape[1:])
+y_0, x_0 = np.unravel_index(np.nanargmax(data_cube[1000]), data_cube.shape[1:])
 aperture = (xx - x_0)**2 + (yy - y_0)**2 < r**2
+
+im = np.nansum(data_cube, axis=0)
+fig, ax = plt.subplots(nrows=1, ncols=1)
+ax.imshow(im)
+ax.scatter(x=x_0, y=y_0, c="r", s=50)
 
 data_cube[:, ~aperture] = np.nan
 var_cube[:, ~aperture] = np.nan
@@ -515,6 +520,7 @@ spec_err_log = log_rebin_errors(
 # the spectrum is negative
 bad_px_mask = np.logical_or(spec_err_log <=0, np.isinf(spec_err_log))
 bad_px_mask = np.logical_or(bad_px_mask, spec_log < 0)
+bad_px_mask = np.logical_or(bad_px_mask, np.isnan(spec_err_log))
 
 # Mask out manually-defined negative values and problematic regions
 for r_A in bad_pixel_ranges_A:
@@ -529,6 +535,8 @@ norm = np.median(spec_log[good_px])
 spec_err_log /= norm
 spec_log /= norm    
 spec_err_log[spec_err_log <= 0] = 99999
+spec_err_log[np.isnan(spec_err_log)] = 99999
+spec_err_log[np.isinf(spec_err_log)] = 99999
 
 ##########################################################################
 # Use pPXF to obtain the stellar age + metallicity, and fit emission lines
