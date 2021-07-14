@@ -67,6 +67,11 @@ dlambda_r_A = hdulist_R7000[0].header["CDELT3"]
 lambda_vals_r_A = np.arange(
     start=lambda_0_r_A, stop=lambda_end_r_A, step=dlambda_r_A)
 
+if datacube_r.shape[0] == len(lambda_vals_r_A) - 1:
+    lambda_vals_r_A = lambda_vals_r_A[:-1]
+if datacube_b.shape[0] == len(lambda_vals_b_A) - 1:
+    lambda_vals_b_A = lambda_vals_b_A[:-1]
+
 # Instrumental resolution
 FWHM_inst_b_A = 1.4  # as measured using sky lines in the b grating
 sigma_inst_b_A = FWHM_inst_b_A / (2 * np.sqrt(2 * np.log(2)))
