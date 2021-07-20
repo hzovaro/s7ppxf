@@ -43,55 +43,12 @@ from IPython.core.debugger import Tracer
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_pdf import PdfPages
 matplotlib.rc("font", size=10)
-matplotlib.rc("text", usetex=False)
+matplotlib.rc("text", usetex=True)
 matplotlib.rc("font", **{"family": "serif"})
 matplotlib.rc("image", interpolation="nearest")
 matplotlib.rc("image", origin="lower")
 plt.close("all")
 plt.ion()
-
-##############################################################################
-# USER OPTIONS
-##############################################################################
-# Object information
-obj_name = sys.argv[1]
-grating = "COMB"
-bad_pixel_ranges_A = []  # Spectral regions to mask out (in Angstroms). format: [[lambda_1, lambda_2], ...]
-
-# Plotting settings
-savefigs = True
-plotit = True
-
-# Binning settings
-r = 5  # radius of aperture in arcsec
-
-# ppxf options
-ngascomponents = 2  # Number of kinematic components to be fitted to the emission lines
-isochrones = "Padova"
-auto_adjust_regul = False  # Set to False for interactive execution
-mask_NaD = False  # Whether to mask out the Na D doublet - leave False for now
-
-##############################################################################
-# Paths and filenames
-##############################################################################
-assert "S7_DIR" in os.environ, 'S7_DIR environment variable is not defined! Make sure it is defined in your .bashrc file: export S7_DIR="/path/to/s7/data/"'
-data_dir = os.environ["S7_DIR"]
-ppxf_output_path = os.path.join(data_dir, "ppxf")
-fig_path =  os.path.join(ppxf_output_path, "figs") # Where to save figures
-output_fits_path =  os.path.join(ppxf_output_path, "fits")  # Path to S7 data cubes
-input_fits_path =  os.path.join(data_dir, "0_Cubes")  # Path to S7 data cubes
-for path in [ppxf_output_path, fig_path, output_fits_path, input_fits_path]:
-    assert os.path.exists(path), "Directory {} does not exist!".format(path) 
-
-# Name of input FITS file
-assert grating in ["B3000", "R7000", "COMB"], "grating must be one of B3000, R7000 or COMB!"
-if grating == "COMB":
-    input_fits_fname = "{}_COMB.fits".format(obj_name)
-elif grating == "B3000":
-    input_fits_fname = "{}_B.fits".format(obj_name)
-elif grating == "R7000":
-    input_fits_fname = "{}_R.fits".format(obj_name)
-assert os.path.exists(os.path.join(input_fits_path, input_fits_fname)), "File {} does not exist!".format(input_fits_fname)
 
 ##############################################################################
 # For interactive execution
@@ -174,479 +131,440 @@ def ppxf_helper(args):
     return pp_age_met
 
 ##############################################################################
-# Ojbect information
+# USER OPTIONS
 ##############################################################################
-# Redshift information
-n = Ned.query_object(obj_name)
-z = n["Redshift"].data[0]  # Initial estimate of the galaxy redshift
-v_sys = n["Velocity"].data[0] # systemic velocity from NED
-D_A_Mpc, D_L_Mpc = get_dist(z, H0=70.0, WM=0.3)
-kpc_per_as = D_A_Mpc * 1e3 * np.pi / 180.0 / 3600.0
-c_km_s = constants.c / 1e3
-vel = c_km_s * np.log(1 + z) # Starting guess for systemic velocity (eq.(8) of Cappellari (2017))
+grating = "COMB"
+bad_pixel_ranges_A = []  # Spectral regions to mask out (in Angstroms). format: [[lambda_1, lambda_2], ...]
 
-# Extinction
-t = IrsaDust.get_query_table(obj_name, radius="2deg")
-A_V_Gal = t["ext SandF ref"] * 3.1  # S&F 2011 A_V (= E(B-V) * 3.1)
+# Plotting settings
+savefigs = True
+plotit = True
 
-##############################################################################
-# ppxf parameters
-##############################################################################
-if isochrones == "Padova":
-    metals_to_use = ['004', '008', '019']
-elif isochrones == "Geneva":
-    metals_to_use = ['001', '004', '008', '020', '040']
-ssp_template_path = "SSP_templates/SSP{}".format(isochrones)
+# Binning settings
+r = 5  # radius of aperture in arcsec
 
-# pPXF parameters for the age & metallicity + gas fit
-adegree_age_met = -1     # Should be zero for age + metallicity fitting
-mdegree_age_met = 4     # Should be zero for kinematic fitting
-ncomponents = ngascomponents + 1    # number of kinematic components. 2 = stars + gas; 3 = stars + 2 * gas
-nmoments_age_met = [2 for i in range(ncomponents)]
-start_age_met = [[vel, 100.] for i in range(ncomponents)]
-fixed_age_met = [[0, 0] for i in range(ncomponents)]
-tie_balmer = True if grating == "COMB" else False
-limit_doublets = False
-
-# pPXF parameters for the stellar kinematics fit
-adegree_kin = 12   # Should be zero for age + metallicity fitting
-mdegree_kin = 0   # Should be zero for kinematic fitting
-nmoments_kin = 2    # 2: only fit radial velocity and velocity dispersion
-start_kin = [vel, 100.]
-fixed_kin = [0, 0]
-
-# SSP template parameters
-# Gonzalez-Delgado spectra_linear have a constant spectral sampling of 0.3 A.
-dlambda_A_ssp = 0.30
-# Assuming that sigma = dlambda_A_ssp.
-FWHM_ssp_A = 2 * np.sqrt(2 * np.log(2)) * dlambda_A_ssp
+# ppxf options
+ngascomponents = 2  # Number of kinematic components to be fitted to the emission lines
+isochrones = "Padova"
+auto_adjust_regul = True  # Set to False for interactive execution
+mask_NaD = True  # Whether to mask out the Na D doublet - leave False for now
 
 ##############################################################################
-# FILE NAMES
-##############################################################################
-# Description string for filenames
-fname_str = "aperture"
+# Object information
+for obj_name in sys.argv[1:]:
+    ##############################################################################
+    # Paths and filenames
+    ##############################################################################
+    assert "S7_DIR" in os.environ, 'S7_DIR environment variable is not defined! Make sure it is defined in your .bashrc file: export S7_DIR="/path/to/s7/data/"'
+    data_dir = os.environ["S7_DIR"]
+    ppxf_output_path = os.path.join(data_dir, "ppxf")
+    fig_path =  os.path.join(ppxf_output_path, "figs") # Where to save figures
+    output_fits_path =  os.path.join(ppxf_output_path, "fits")  # Path to S7 data cubes
+    input_fits_path =  os.path.join(data_dir, "0_Cubes")  # Path to S7 data cubes
+    for path in [ppxf_output_path, fig_path, output_fits_path, input_fits_path]:
+        assert os.path.exists(path), "Directory {} does not exist!".format(path) 
 
-# Figure names
-fig_fname = os.path.join(fig_path,
-    "{}_ppxf_{}_{}_{}_r={}as_ngascomponents={}.pdf".format(obj_name, grating, fname_str, isochrones, r, ncomponents - 1))
-fig_regul_fname = os.path.join(fig_path,
-    "{}_ppxf_regul_{}_{}_{}_r={}as_ngascomponents={}.pdf".format(obj_name, grating, fname_str, isochrones, r, ncomponents - 1))
+    # Name of input FITS file
+    assert grating in ["B3000", "R7000", "COMB"], "grating must be one of B3000, R7000 or COMB!"
+    if grating == "COMB":
+        input_fits_fname = "{}_COMB.fits".format(obj_name)
+    elif grating == "B3000":
+        input_fits_fname = "{}_B.fits".format(obj_name)
+    elif grating == "R7000":
+        input_fits_fname = "{}_R.fits".format(obj_name)
+    assert os.path.exists(os.path.join(input_fits_path, input_fits_fname)), "File {} does not exist!".format(input_fits_fname)
 
-# FITS names
-output_fits_fname = os.path.join(output_fits_path,
-    "{}_ppxf_{}_{}_{}_r={}as_ngascomponents={}.fits".format(obj_name, grating, fname_str, isochrones, r, ncomponents - 1))
+    ##############################################################################
+    # Ojbect information
+    ##############################################################################
+    # Redshift information
+    n = Ned.query_object(obj_name)
+    z = n["Redshift"].data[0]  # Initial estimate of the galaxy redshift
+    v_sys = n["Velocity"].data[0] # systemic velocity from NED
+    D_A_Mpc, D_L_Mpc = get_dist(z, H0=70.0, WM=0.3)
+    kpc_per_as = D_A_Mpc * 1e3 * np.pi / 180.0 / 3600.0
+    c_km_s = constants.c / 1e3
+    vel = c_km_s * np.log(1 + z) # Starting guess for systemic velocity (eq.(8) of Cappellari (2017))
 
-if mask_NaD:
-    fig_fname = fig_fname.replace("ppxf", "ppxf_mask_NaD")
-    fig_regul_fname = fig_regul_fname.replace("ppxf", "ppxf_mask_NaD")
-    output_fits_fname = output_fits_fname.replace("ppxf", "ppxf_mask_NaD")
+    # Extinction
+    t = IrsaDust.get_query_table(obj_name, radius="2deg")
+    A_V_Gal = t["ext SandF ref"] * 3.1  # S&F 2011 A_V (= E(B-V) * 3.1)
 
-print("---------------------------------------------------------------------")
-print("FILE NAMES")
-print("---------------------------------------------------------------------")
-print("Main ppxf figures:\t{}".format(fig_fname))
-print("Regul figures:\t\t{}".format(fig_regul_fname))
-print("FITS file:\t\t{}".format(output_fits_fname))
-print("---------------------------------------------------------------------")
-hit_key_to_continue()
+    ##############################################################################
+    # ppxf parameters
+    ##############################################################################
+    if isochrones == "Padova":
+        metals_to_use = ['004', '008', '019']
+    elif isochrones == "Geneva":
+        metals_to_use = ['001', '004', '008', '020', '040']
+    ssp_template_path = "SSP_templates/SSP{}".format(isochrones)
 
-##############################################################################
-# Open the data cube containing the galaxy spectra
-##############################################################################
-# Load FITS file containing WiFeS data
-hdu = fits.open(os.path.join(input_fits_path, input_fits_fname))
-data_cube = hdu[0].data # TODO: check if we need to crop at all
-var_cube = hdu[1].data
-N_lambda, nrows, ncols = data_cube.shape
+    # pPXF parameters for the age & metallicity + gas fit
+    adegree_age_met = -1     # Should be zero for age + metallicity fitting
+    mdegree_age_met = 4     # Should be zero for kinematic fitting
+    ncomponents = ngascomponents + 1    # number of kinematic components. 2 = stars + gas; 3 = stars + 2 * gas
+    nmoments_age_met = [2 for i in range(ncomponents)]
+    start_age_met = [[vel, 100.] for i in range(ncomponents)]
+    fixed_age_met = [[0, 0] for i in range(ncomponents)]
+    tie_balmer = True if grating == "COMB" else False
+    limit_doublets = False
 
-# NaN out the bottom couple of rows
-data_cube[:, :2, :] = np.nan
-var_cube[:, :2, :] = np.nan
+    # pPXF parameters for the stellar kinematics fit
+    adegree_kin = 12   # Should be zero for age + metallicity fitting
+    mdegree_kin = 0   # Should be zero for kinematic fitting
+    nmoments_kin = 2    # 2: only fit radial velocity and velocity dispersion
+    start_kin = [vel, 100.]
+    fixed_kin = [0, 0]
 
-# Wavelength information
-lambda_start_A = hdu[0].header["CRVAL3"]
-lambda_end_A = hdu[0].header["CRVAL3"] + \
-    hdu[0].header["CDELT3"] * (N_lambda - 1)
-dlambda_A = hdu[0].header["CDELT3"]
-lambda_vals_linear = np.arange(
-    start=lambda_start_A, stop=lambda_end_A + dlambda_A, step=dlambda_A)
-lambda_vals_linear = lambda_vals_linear[:data_cube.shape[0]]
+    # SSP template parameters
+    # Gonzalez-Delgado spectra_linear have a constant spectral sampling of 0.3 A.
+    dlambda_A_ssp = 0.30
+    # Assuming that sigma = dlambda_A_ssp.
+    FWHM_ssp_A = 2 * np.sqrt(2 * np.log(2)) * dlambda_A_ssp
 
-# Log-rebin one spectrum to get the logarithmic wavelength scale plus the 
-# velscale
-_, lambda_vals_log, velscale =\
-        util.log_rebin(np.array([lambda_start_A, lambda_end_A]),
-                       data_cube[:, 0, 0])
+    ##############################################################################
+    # FILE NAMES
+    ##############################################################################
+    # Description string for filenames
+    fname_str = "aperture"
 
-# Instrumental resolution
-if grating == "B3000" or grating == "COMB":
-    FWHM_inst_A = 1.4  # as measured using sky lines in the b3000 grating
-elif grating == "R7000":
-    FWHM_inst_A = 0.9
-sigma_inst_A = FWHM_inst_A / (2 * np.sqrt(2 * np.log(2)))
+    # Figure names
+    fig_fname = os.path.join(fig_path,
+        "{}_ppxf_{}_{}_{}_r={}as_ngascomponents={}.pdf".format(obj_name, grating, fname_str, isochrones, r, ncomponents - 1))
+    fig_regul_fname = os.path.join(fig_path,
+        "{}_ppxf_regul_{}_{}_{}_r={}as_ngascomponents={}.pdf".format(obj_name, grating, fname_str, isochrones, r, ncomponents - 1))
 
-hdu.close()
+    # FITS names
+    output_fits_fname = os.path.join(output_fits_path,
+        "{}_ppxf_{}_{}_{}_r={}as_ngascomponents={}.fits".format(obj_name, grating, fname_str, isochrones, r, ncomponents - 1))
 
-##############################################################################
-# Correct for galactic extinction
-##############################################################################
-A_vals = extinction.fm07(lambda_vals_linear, a_v=A_V_Gal)
-data_cube *= 10**(0.4 * A_vals[:, None, None])
-var_cube *= 10**(2 * 0.4 * A_vals[:, None, None])
+    if mask_NaD:
+        fig_fname = fig_fname.replace("ppxf", "ppxf_mask_NaD")
+        fig_regul_fname = fig_regul_fname.replace("ppxf", "ppxf_mask_NaD")
+        output_fits_fname = output_fits_fname.replace("ppxf", "ppxf_mask_NaD")
 
-##############################################################################
-# Spatially bin the data cube
-##############################################################################
-yy, xx = np.meshgrid(range(data_cube.shape[1]), range(
-    data_cube.shape[2]), indexing='ij')
+    print("---------------------------------------------------------------------")
+    print("FILE NAMES")
+    print("---------------------------------------------------------------------")
+    print("Main ppxf figures:\t{}".format(fig_fname))
+    print("Regul figures:\t\t{}".format(fig_regul_fname))
+    print("FITS file:\t\t{}".format(output_fits_fname))
+    print("---------------------------------------------------------------------")
+    hit_key_to_continue()
 
-# Mask out spaxels beyond the given radius
-y_0, x_0 = np.unravel_index(np.nanargmax(data_cube[1000]), data_cube.shape[1:])
-aperture = (xx - x_0)**2 + (yy - y_0)**2 < r**2
+    ##############################################################################
+    # Open the data cube containing the galaxy spectra
+    ##############################################################################
+    # Load FITS file containing WiFeS data
+    hdu = fits.open(os.path.join(input_fits_path, input_fits_fname))
+    data_cube = hdu[0].data # TODO: check if we need to crop at all
+    var_cube = hdu[1].data
+    N_lambda, nrows, ncols = data_cube.shape
 
-im = np.nansum(data_cube, axis=0)
-fig, ax = plt.subplots(nrows=1, ncols=1)
-ax.imshow(im)
-ax.scatter(x=x_0, y=y_0, c="r", s=50)
+    # NaN out the bottom couple of rows
+    data_cube[:, :2, :] = np.nan
+    var_cube[:, :2, :] = np.nan
 
-data_cube[:, ~aperture] = np.nan
-var_cube[:, ~aperture] = np.nan
+    # Wavelength information
+    lambda_start_A = hdu[0].header["CRVAL3"]
+    lambda_end_A = hdu[0].header["CRVAL3"] + \
+        hdu[0].header["CDELT3"] * (N_lambda - 1)
+    dlambda_A = hdu[0].header["CDELT3"]
+    lambda_vals_linear = np.arange(
+        start=lambda_start_A, stop=lambda_end_A + dlambda_A, step=dlambda_A)
+    lambda_vals_linear = lambda_vals_linear[:data_cube.shape[0]]
 
-# Extract spectrum
-spec_linear = np.nansum(np.nansum(data_cube, axis=1), axis=1)
-spec_err_linear = np.sqrt(np.nansum(np.nansum(var_cube, axis=1), axis=1))
+    # Log-rebin one spectrum to get the logarithmic wavelength scale plus the 
+    # velscale
+    _, lambda_vals_log, velscale =\
+            util.log_rebin(np.array([lambda_start_A, lambda_end_A]),
+                           data_cube[:, 0, 0])
 
-# Calculate the SNR
-SNR = np.nanmedian(spec_linear / spec_err_linear)
-print("SNR = {:.4f}".format(SNR))
+    # Instrumental resolution
+    if grating == "B3000" or grating == "COMB":
+        FWHM_inst_A = 1.4  # as measured using sky lines in the b3000 grating
+    elif grating == "R7000":
+        FWHM_inst_A = 0.9
+    sigma_inst_A = FWHM_inst_A / (2 * np.sqrt(2 * np.log(2)))
 
-##############################################################################
-# SSP templates
-##############################################################################
-# Load the .npz containing the stellar spectra_linear
-ssp_template_fnames = ['SSP' + isochrones +
-                       '.z' + m + '.npz' for m in metals_to_use]
-nmetals = len(ssp_template_fnames)
+    hdu.close()
 
-# All stars_templates_log must have the same number of wavelength values &
-# number of age bins!
-stars_templates_log = []
-stars_templates_linear = []
-metallicities = []
-for ssp_template_fname in ssp_template_fnames:
-    f = np.load(os.path.join(ssp_template_path, ssp_template_fname))
-    metallicities.append(f["metallicity"].item())
-    ages = f["ages"]
-    spectra_ssp_linear = f["L_vals"]
-    lambda_vals_ssp_linear = f["lambda_vals_A"]
+    ##############################################################################
+    # Correct for galactic extinction
+    ##############################################################################
+    A_vals = extinction.fm07(lambda_vals_linear, a_v=A_V_Gal)
+    data_cube *= 10**(0.4 * A_vals[:, None, None])
+    var_cube *= 10**(2 * 0.4 * A_vals[:, None, None])
 
-    # Extract the wavelength range and logarithmically rebin one spectrum
-    # to a velocity scale 2x smaller than the stellar template spectra_linear, to
-    # determine the size needed for the array which will contain the template
-    # spectra_linear.
-    spec_ssp_log, lambda_vals_ssp_log, velscale_temp = util.log_rebin(np.array(
-        [lambda_vals_ssp_linear[0], lambda_vals_ssp_linear[-1]]),
-        spectra_ssp_linear[:, 0], velscale=velscale)
-    stars_templates_log.append(np.empty((spec_ssp_log.size, len(ages))))
-    stars_templates_linear.append(np.empty((spectra_ssp_linear[:, 0].size,
-                                            len(ages))))
+    ##############################################################################
+    # Spatially bin the data cube
+    ##############################################################################
+    yy, xx = np.meshgrid(range(data_cube.shape[1]), range(
+        data_cube.shape[2]), indexing='ij')
 
-    # Quadratic sigma difference in pixels Vazdekis --> SAURON
-    # The formula below is rigorously valid if the shapes of the
-    # instrumental spectral profiles are well approximated by Gaussians.
-    FWHM_diff_A = np.sqrt(FWHM_inst_A**2 - FWHM_ssp_A**2)
-    sigma = FWHM_diff_A / (2 * np.sqrt(2 * np.log(2))) / \
-        dlambda_A_ssp  # Sigma difference in pixels
-    for ii in range(spectra_ssp_linear.shape[1]):
-        spec_ssp_linear = spectra_ssp_linear[:, ii]
-        spec_ssp_linear = ndimage.gaussian_filter1d(spec_ssp_linear, sigma)
-        spec_ssp_log, lambda_vals_ssp_log, velscale_temp =\
-            util.log_rebin(np.array(
-                [lambda_vals_ssp_linear[0], lambda_vals_ssp_linear[-1]]),
-                spec_ssp_linear, velscale=velscale)
-        # Normalise templates
-        stars_templates_log[-1][:, ii] = spec_ssp_log / np.median(spec_ssp_log)
-        stars_templates_linear[-1][:,
-                                   ii] = spec_ssp_linear / np.median(spec_ssp_linear)
+    # Mask out spaxels beyond the given radius
+    y_0, x_0 = np.unravel_index(np.nanargmax(np.nanmedian(data_cube, axis=0)), data_cube.shape[1:])
+    aperture = (xx - x_0)**2 + (yy - y_0)**2 < r**2
 
-# String for filename
-metal_string = ""
-for metal in metallicities:
-    metal_string += str(metal).split("0.")[1]
-    metal_string += "_"
-metal_string = metal_string[:-1]
+    im = np.nansum(data_cube, axis=0)
+    fig, ax = plt.subplots(nrows=1, ncols=1)
+    ax.imshow(im)
+    ax.scatter(x=x_0, y=y_0, c="r", s=50)
 
-# Convert to array
-stars_templates_log = np.array(stars_templates_log)
-stars_templates_log = np.swapaxes(stars_templates_log, 0, 1)
-reg_dim = stars_templates_log.shape[1:]
-nmetals, nages = reg_dim
-stars_templates_log = np.reshape(
-    stars_templates_log, (stars_templates_log.shape[0], -1))
+    data_cube[:, ~aperture] = np.nan
+    var_cube[:, ~aperture] = np.nan
 
-# Store the linear spectra_linear too
-stars_templates_linear = np.array(stars_templates_linear)
-stars_templates_linear = np.swapaxes(stars_templates_linear, 0, 1)
-stars_templates_linear = np.reshape(
-    stars_templates_linear, (stars_templates_linear.shape[0], -1))
+    # Extract spectrum
+    spec_linear = np.nansum(np.nansum(data_cube, axis=1), axis=1) * 4 * np.pi * (D_L_Mpc * 1e6 * 3.086e18)**2  # Needs to be in units of erg/s/A
+    spec_err_linear = np.sqrt(np.nansum(np.nansum(var_cube, axis=1), axis=1)) * 4 * np.pi * (D_L_Mpc * 1e6 * 3.086e18)**2  # Needs to be in units of erg/s/A
 
-# This line only works if velscale_ratio = 1
-dv = (lambda_vals_ssp_log[0] - lambda_vals_log[0]) * c_km_s  # km/s
+    # Calculate the SNR
+    SNR = np.nanmedian(spec_linear / spec_err_linear)
+    print("SNR = {:.4f}".format(SNR))
 
-##############################################################################
-# Gas templates
-##############################################################################
-# Construct a set of Gaussian emission line stars_templates_log.
-# Estimate the wavelength fitted range in the rest frame.
-gas_templates, gas_names, eline_lambdas = util.emission_lines(
-    logLam_temp=lambda_vals_ssp_log,
-    lamRange_gal=np.array([lambda_start_A, lambda_end_A]) / (1 + z),
-    FWHM_gal=FWHM_inst_A,
-    tie_balmer=tie_balmer,
-    limit_doublets=limit_doublets,
-    vacuum=False
-)
+    ##############################################################################
+    # SSP templates
+    ##############################################################################
+    # Load the .npz containing the stellar spectra_linear
+    ssp_template_fnames = ['SSP' + isochrones +
+                           '.z' + m + '.npz' for m in metals_to_use]
+    nmetals = len(ssp_template_fnames)
 
-##############################################################################
-# Merge templates so they can be input to pPXF
-##############################################################################
-# Combines the stellar and gaseous stars_templates_log into a single array.
-# During the PPXF fit they will be assigned a different kinematic
-# COMPONENT value
-n_ssp_templates = stars_templates_log.shape[1]
-# forbidden lines contain "[*]"
-n_forbidden_lines = np.sum(["[" in a for a in gas_names])
-n_balmer_lines = len(gas_names) - n_forbidden_lines
+    # All stars_templates_log must have the same number of wavelength values &
+    # number of age bins!
+    stars_templates_log = []
+    stars_templates_linear = []
+    stellar_template_norms = []
+    metallicities = []
+    for ssp_template_fname in ssp_template_fnames:
+        f = np.load(os.path.join(ssp_template_path, ssp_template_fname))
+        metallicities.append(f["metallicity"].item())
+        ages = f["ages"]
+        spectra_ssp_linear = f["L_vals"]
+        lambda_vals_ssp_linear = f["lambda_vals_A"]
 
-# Here, we lump together the Balmer + forbidden lines into a single kinematic component
-if ncomponents == 3:
-    kinematic_components = [0] * n_ssp_templates + \
-        [1] * len(gas_names) + [2] * len(gas_names)
-elif ncomponents == 2:
-    kinematic_components = [0] * n_ssp_templates + [1] * len(gas_names)
-# gas_component=True for gas templates
-gas_component = np.array(kinematic_components) > 0
+        # Extract the wavelength range and logarithmically rebin one spectrum
+        # to a velocity scale 2x smaller than the stellar template spectra_linear, to
+        # determine the size needed for the array which will contain the template
+        # spectra_linear.
+        spec_ssp_log, lambda_vals_ssp_log, velscale_temp = util.log_rebin(np.array(
+            [lambda_vals_ssp_linear[0], lambda_vals_ssp_linear[-1]]),
+            spectra_ssp_linear[:, 0], velscale=velscale)
+        stars_templates_log.append(np.empty((spec_ssp_log.size, len(ages))))
+        stars_templates_linear.append(np.empty((spectra_ssp_linear[:, 0].size,
+                                                len(ages))))
 
-# If the Balmer lines are tied one should allow for gas reddeining.
-# The gas_reddening can be different from the stellar one, if both are fitted.
-gas_reddening = 0 if tie_balmer else None
+        # Quadratic sigma difference in pixels Vazdekis --> SAURON
+        # The formula below is rigorously valid if the shapes of the
+        # instrumental spectral profiles are well approximated by Gaussians.
+        FWHM_diff_A = np.sqrt(FWHM_inst_A**2 - FWHM_ssp_A**2)
+        sigma = FWHM_diff_A / (2 * np.sqrt(2 * np.log(2))) / \
+            dlambda_A_ssp  # Sigma difference in pixels
+        nages = spectra_ssp_linear.shape[1]
+        for ii in range(nages):
+            spec_ssp_linear = spectra_ssp_linear[:, ii]
+            spec_ssp_linear = ndimage.gaussian_filter1d(spec_ssp_linear, sigma)
+            spec_ssp_log, lambda_vals_ssp_log, velscale_temp =\
+                util.log_rebin(np.array(
+                    [lambda_vals_ssp_linear[0], lambda_vals_ssp_linear[-1]]),
+                    spec_ssp_linear, velscale=velscale)
+            # Normalise templates
+            stars_templates_log[-1][:, ii] = spec_ssp_log / np.median(spec_ssp_log)
+            stars_templates_linear[-1][:, ii] = spec_ssp_linear / np.median(spec_ssp_linear)
 
-# Combines the stellar and gaseous stars_templates_log into a single array.
-# During the PPXF fit they will be assigned a different kinematic
-# COMPONENT value
-if ncomponents > 2:
-    gas_templates = np.concatenate((gas_templates, gas_templates), axis=1)
-    gas_names = np.concatenate((gas_names, gas_names))
-    eline_lambdas = np.concatenate((eline_lambdas, eline_lambdas))
+            stellar_template_norms.append(np.median(spec_ssp_log))
+            
+    # Reshape
+    stellar_template_norms = np.reshape(stellar_template_norms, (nmetals, nages))
 
-gas_names_new = []
-for ii in range(len(gas_names)):
-    gas_names_new.append(gas_names[ii] + " (component {})".format(kinematic_components[ii + n_ssp_templates]))
-gas_names = gas_names_new
-templates = np.column_stack([stars_templates_log, gas_templates])
+    # String for filename
+    metal_string = ""
+    for metal in metallicities:
+        metal_string += str(metal).split("0.")[1]
+        metal_string += "_"
+    metal_string = metal_string[:-1]
 
-##############################################################################
-# Set up plots
-##############################################################################
-# Plotting
-if plotit:
-    # For setting up axes
-    fig_nrows = 3
-    left = 0.1
-    right = 0.1
-    middle = 0.1
-    bottom = 0.075
-    top = 0.075
-    cbarax_width = 0.03
-    hist_bottom = 0.1
+    # Convert to array
+    stars_templates_log = np.array(stars_templates_log)
+    stars_templates_log = np.swapaxes(stars_templates_log, 0, 1)
+    reg_dim = stars_templates_log.shape[1:]
+    nmetals, nages = reg_dim
+    stars_templates_log = np.reshape(
+        stars_templates_log, (stars_templates_log.shape[0], -1))
 
-    ax_width = 1 - left - right
-    ax_height = (1.0 - hist_bottom - top -
-                 (fig_nrows - 1) * middle) / fig_nrows
+    # Store the linear spectra_linear too
+    stars_templates_linear = np.array(stars_templates_linear)
+    stars_templates_linear = np.swapaxes(stars_templates_linear, 0, 1)
+    stars_templates_linear = np.reshape(
+        stars_templates_linear, (stars_templates_linear.shape[0], -1))
 
-    ax_kin_width = ax_width
-    ax_age_met_width = ax_width
-    ax_hist_width = ax_width
+    # This line only works if velscale_ratio = 1
+    dv = (lambda_vals_ssp_log[0] - lambda_vals_log[0]) * c_km_s  # km/s
 
-    ax_kin_height = ax_height
-    ax_age_met_height = ax_height
-    ax_hist_height = ax_height
+    ##############################################################################
+    # Gas templates
+    ##############################################################################
+    # Construct a set of Gaussian emission line stars_templates_log.
+    # Estimate the wavelength fitted range in the rest frame.
+    gas_templates, gas_names, eline_lambdas = util.emission_lines(
+        logLam_temp=lambda_vals_ssp_log,
+        lamRange_gal=np.array([lambda_start_A, lambda_end_A]) / (1 + z),
+        FWHM_gal=FWHM_inst_A,
+        tie_balmer=tie_balmer,
+        limit_doublets=limit_doublets,
+        vacuum=False
+    )
 
-    ax_kin_left = left
-    ax_age_met_left = left
-    ax_hist_left = left
+    ##############################################################################
+    # Merge templates so they can be input to pPXF
+    ##############################################################################
+    # Combines the stellar and gaseous stars_templates_log into a single array.
+    # During the PPXF fit they will be assigned a different kinematic
+    # COMPONENT value
+    n_ssp_templates = stars_templates_log.shape[1]
+    # forbidden lines contain "[*]"
+    n_forbidden_lines = np.sum(["[" in a for a in gas_names])
+    n_balmer_lines = len(gas_names) - n_forbidden_lines
 
-    ax_hist_bottom = hist_bottom
-    ax_age_met_bottom = ax_hist_bottom + ax_hist_height + middle
-    ax_kin_bottom = ax_age_met_bottom + ax_hist_height + middle
+    # Here, we lump together the Balmer + forbidden lines into a single kinematic component
+    if ncomponents == 3:
+        kinematic_components = [0] * n_ssp_templates + \
+            [1] * len(gas_names) + [2] * len(gas_names)
+    elif ncomponents == 2:
+        kinematic_components = [0] * n_ssp_templates + [1] * len(gas_names)
+    # gas_component=True for gas templates
+    gas_component = np.array(kinematic_components) > 0
 
-    cbarax_left = left + ax_hist_width
-    cbarax_bottom = ax_hist_bottom
-    cbarax_width = 0.03
-    cbarax_height = ax_hist_height
+    # If the Balmer lines are tied one should allow for gas reddeining.
+    # The gas_reddening can be different from the stellar one, if both are fitted.
+    gas_reddening = 0 if tie_balmer else None
 
-    # Axes for plotting the best-fit spectrum
-    fig_spec = plt.figure(figsize=(20, 12))
-    ax_kin = fig_spec.add_axes([
-        ax_kin_left, ax_kin_bottom, ax_kin_width, ax_kin_height])
-    ax_age_met = fig_spec.add_axes([
-        ax_age_met_left, ax_age_met_bottom, ax_age_met_width, ax_age_met_height])
-    ax_hist = fig_spec.add_axes([
-        ax_hist_left, ax_hist_bottom, ax_hist_width, ax_hist_height])
-    cbarax = fig_spec.add_axes([
-        cbarax_left, cbarax_bottom, cbarax_width, cbarax_height])
+    # Combines the stellar and gaseous stars_templates_log into a single array.
+    # During the PPXF fit they will be assigned a different kinematic
+    # COMPONENT value
+    if ncomponents > 2:
+        gas_templates = np.concatenate((gas_templates, gas_templates), axis=1)
+        gas_names = np.concatenate((gas_names, gas_names))
+        eline_lambdas = np.concatenate((eline_lambdas, eline_lambdas))
 
-    # Open the pdf file
-    pp = PdfPages(fig_fname)
+    gas_names_new = []
+    for ii in range(len(gas_names)):
+        gas_names_new.append(gas_names[ii] + " (component {})".format(kinematic_components[ii + n_ssp_templates]))
+    gas_names = gas_names_new
+    templates = np.column_stack([stars_templates_log, gas_templates])
 
-    # Figure for auto_adjust_regul
-    if auto_adjust_regul:
-        fig_regul, ax_regul = plt.subplots()
-        pp_regul = PdfPages(fig_regul_fname)
+    ##############################################################################
+    # Rebin spectrum
+    ##############################################################################
+    # Rebin to a log scale
+    spec_log, lambda_vals_log, velscale = util.log_rebin(
+        np.array([lambda_start_A, lambda_end_A]), spec_linear)
 
-##############################################################################
-# Rebin spectrum
-##############################################################################
-# Rebin to a log scale
-spec_log, lambda_vals_log, velscale = util.log_rebin(
-    np.array([lambda_start_A, lambda_end_A]), spec_linear)
+    # Estimate the errors
+    spec_err_log = log_rebin_errors(
+        spec_linear, spec_err_linear, lambda_start_A, lambda_end_A)
 
-# Estimate the errors
-spec_err_log = log_rebin_errors(
-    spec_linear, spec_err_linear, lambda_start_A, lambda_end_A)
+    # Mask out regions where the noise vector is zero or inifinite, and where 
+    # the spectrum is negative
+    bad_px_mask = np.logical_or(spec_err_log <=0, np.isinf(spec_err_log))
+    bad_px_mask = np.logical_or(bad_px_mask, spec_log < 0)
+    bad_px_mask = np.logical_or(bad_px_mask, np.isnan(spec_err_log))
 
-# Mask out regions where the noise vector is zero or inifinite, and where 
-# the spectrum is negative
-bad_px_mask = np.logical_or(spec_err_log <=0, np.isinf(spec_err_log))
-bad_px_mask = np.logical_or(bad_px_mask, spec_log < 0)
-bad_px_mask = np.logical_or(bad_px_mask, np.isnan(spec_err_log))
+    # Mask out manually-defined negative values and problematic regions
+    for r_A in bad_pixel_ranges_A:
+        r1_A, r2_A = r_A
+        r1_px = np.nanargmin(np.abs(np.exp(lambda_vals_log) - r1_A))
+        r2_px = np.nanargmin(np.abs(np.exp(lambda_vals_log) - r2_A))
+        bad_px_mask[r1_px:r2_px] = True
+    good_px = np.squeeze(np.argwhere(~bad_px_mask))
 
-# Mask out manually-defined negative values and problematic regions
-for r_A in bad_pixel_ranges_A:
-    r1_A, r2_A = r_A
-    r1_px = np.nanargmin(np.abs(np.exp(lambda_vals_log) - r1_A))
-    r2_px = np.nanargmin(np.abs(np.exp(lambda_vals_log) - r2_A))
-    bad_px_mask[r1_px:r2_px] = True
-good_px = np.squeeze(np.argwhere(~bad_px_mask))
+    # Normalize spectrum to avoid numerical issues
+    norm = np.median(spec_log[good_px])
+    spec_err_log /= norm
+    spec_log /= norm    
+    spec_err_log[spec_err_log <= 0] = 99999
+    spec_err_log[np.isnan(spec_err_log)] = 99999
+    spec_err_log[np.isinf(spec_err_log)] = 99999
 
-# Normalize spectrum to avoid numerical issues
-norm = np.median(spec_log[good_px])
-spec_err_log /= norm
-spec_log /= norm    
-spec_err_log[spec_err_log <= 0] = 99999
-spec_err_log[np.isnan(spec_err_log)] = 99999
-spec_err_log[np.isinf(spec_err_log)] = 99999
+    ##########################################################################
+    # Use pPXF to obtain the stellar age + metallicity, and fit emission lines
+    ##########################################################################
+    t = time()
+    regul = 0
+    delta_chi2_ideal = np.sqrt(2 * len(good_px))
+    pp_age_met = ppxf(templates=templates,
+                      galaxy=spec_log, noise=spec_err_log,
+                      velscale=np.squeeze(velscale), start=start_age_met,
+                      goodpixels=good_px,
+                      moments=nmoments_age_met, degree=adegree_age_met, mdegree=mdegree_age_met,
+                      vsyst=dv,
+                      lam=np.exp(lambda_vals_log),
+                      regul=regul,
+                      reddening_func=reddening_fm07,
+                      reg_dim=reg_dim,
+                      component=kinematic_components, gas_component=gas_component,
+                      gas_names=gas_names, gas_reddening=gas_reddening, method="capfit")
+    delta_chi2 = (pp_age_met.chi2 - 1) * len(good_px)
+    print("----------------------------------------------------")
+    print("Desired Delta Chi^2: %.4g" % delta_chi2_ideal)
+    print("Current Delta Chi^2: %.4g" % delta_chi2)
+    print("----------------------------------------------------")
+    print("Elapsed time in PPXF: %.2f s" % (time() - t))
 
-##########################################################################
-# Use pPXF to obtain the stellar age + metallicity, and fit emission lines
-##########################################################################
-t = time()
-regul = 0
-delta_chi2_ideal = np.sqrt(2 * len(good_px))
-pp_age_met = ppxf(templates=templates,
-                  galaxy=spec_log, noise=spec_err_log,
-                  velscale=np.squeeze(velscale), start=start_age_met,
-                  goodpixels=good_px,
-                  moments=nmoments_age_met, degree=adegree_age_met, mdegree=mdegree_age_met,
-                  vsyst=dv,
-                  lam=np.exp(lambda_vals_log),
-                  regul=regul,
-                  reddening_func=reddening_fm07,
-                  reg_dim=reg_dim,
-                  component=kinematic_components, gas_component=gas_component,
-                  gas_names=gas_names, gas_reddening=gas_reddening, method="capfit")
-delta_chi2 = (pp_age_met.chi2 - 1) * len(good_px)
-print("----------------------------------------------------")
-print("Desired Delta Chi^2: %.4g" % delta_chi2_ideal)
-print("Current Delta Chi^2: %.4g" % delta_chi2)
-print("----------------------------------------------------")
-print("Elapsed time in PPXF: %.2f s" % (time() - t))
+    if not auto_adjust_regul:
+        # Run again but with regularization.
+        print("Scaling noise by {:.4f}...".format(np.sqrt(pp_age_met.chi2)))
+        noise_scaling_factor = np.sqrt(pp_age_met.chi2)
 
-if not auto_adjust_regul:
-    # Run again but with regularization.
-    print("Scaling noise by {:.4f}...".format(np.sqrt(pp_age_met.chi2)))
-    noise_scaling_factor = np.sqrt(pp_age_met.chi2)
-
-    # Manually select the regul parameter value.
-    while True:
-        key = input("Please enter a value for regul: ")
-        if key.isdigit():
-            regul = float(key)
-            break
-
-    while True:
-        t = time()
-        pp_age_met = ppxf(templates=templates,
-                          galaxy=spec_log, noise=spec_err_log * noise_scaling_factor,
-                          velscale=np.squeeze(velscale), start=start_age_met,
-                          goodpixels=good_px,
-                          moments=nmoments_age_met, degree=adegree_age_met, mdegree=mdegree_age_met,
-                          vsyst=dv,
-                          lam=np.exp(lambda_vals_log),
-                          regul=regul,
-                          reddening_func=reddening_fm07,
-                          reg_dim=reg_dim,
-                          component=kinematic_components, gas_component=gas_component,
-                          gas_names=gas_names, gas_reddening=gas_reddening, method="capfit")
-        delta_chi2 = (pp_age_met.chi2 - 1) * len(good_px)
-        print("----------------------------------------------------")
-        print("Desired Delta Chi^2: %.4g" % delta_chi2_ideal)
-        print("Current Delta Chi^2: %.4g" % delta_chi2)
-        print("----------------------------------------------------")
-        print("Elapsed time in PPXF: %.2f s" % (time() - t))
+        # Manually select the regul parameter value.
+        while True:
+            key = input("Please enter a value for regul: ")
+            if key.isdigit():
+                regul = float(key)
+                break
 
         while True:
-            key = input("Enter a new regul value, otherwise press enter: ")
-            if key.isdigit() or key == "":
+            t = time()
+            pp_age_met = ppxf(templates=templates,
+                              galaxy=spec_log, noise=spec_err_log * noise_scaling_factor,
+                              velscale=np.squeeze(velscale), start=start_age_met,
+                              goodpixels=good_px,
+                              moments=nmoments_age_met, degree=adegree_age_met, mdegree=mdegree_age_met,
+                              vsyst=dv,
+                              lam=np.exp(lambda_vals_log),
+                              regul=regul,
+                              reddening_func=reddening_fm07,
+                              reg_dim=reg_dim,
+                              component=kinematic_components, gas_component=gas_component,
+                              gas_names=gas_names, gas_reddening=gas_reddening, method="capfit")
+            delta_chi2 = (pp_age_met.chi2 - 1) * len(good_px)
+            print("----------------------------------------------------")
+            print("Desired Delta Chi^2: %.4g" % delta_chi2_ideal)
+            print("Current Delta Chi^2: %.4g" % delta_chi2)
+            print("----------------------------------------------------")
+            print("Elapsed time in PPXF: %.2f s" % (time() - t))
+
+            while True:
+                key = input("Enter a new regul value, otherwise press enter: ")
+                if key.isdigit() or key == "":
+                    break
+            if key == "":
                 break
-        if key == "":
-            break
-        else:
-            regul = float(key)
+            else:
+                regul = float(key)
 
-else:
-    # Run again but with regularization.
-    print("Scaling noise by {:.4f}...".format(np.sqrt(pp_age_met.chi2)))
-    noise_scaling_factor = np.sqrt(pp_age_met.chi2)
+    else:
+        # Run again but with regularization.
+        print("Scaling noise by {:.4f}...".format(np.sqrt(pp_age_met.chi2)))
+        noise_scaling_factor = np.sqrt(pp_age_met.chi2)
 
-    # Run ppxf a number of times & find the value of regul that minimises 
-    # the difference between the ideal delta-chi2 and the real delta-chi2.
-    regul_vals = np.linspace(0, 1000, 11)
-    obj_vals = []  # "objective" fn
-    pps = []
+        # Run ppxf a number of times & find the value of regul that minimises 
+        # the difference between the ideal delta-chi2 and the real delta-chi2.
+        regul_vals = np.linspace(0, 1000, 11)
+        obj_vals = []  # "objective" fn
+        pps = []
 
-    # Input arguments
-    args_list = [
-        [
-            templates, spec_log, spec_err_log, noise_scaling_factor,
-            velscale, start_age_met, good_px, nmoments_age_met, adegree_age_met,
-            mdegree_age_met, dv, lambda_vals_log, regul, reddening_fm07,
-            reg_dim, kinematic_components, gas_component, gas_names,
-            gas_reddening
-        ] for regul in regul_vals
-    ]
-
-    # Run in parallel
-    nthreads = min(multiprocessing.cpu_count(), len(args_list))
-    print("Running ppxf on {} threads...".format(nthreads))
-    pool = multiprocessing.Pool(nthreads)
-    pps = list(pool.map(ppxf_helper, args_list))
-    pool.close()
-    pool.join()
-
-    # Determine which is the optimal regul value
-    # Quite certain this is correct - see here: https://pypi.org/project/ppxf/#how-to-set-regularization
-    regul_vals = [p.regul for p in pps]  # Redefining as pool may not retain the order of the input list
-    delta_chi2_vals = [(p.chi2 - 1) * len(good_px) for p in pps]
-    obj_vals = [np.abs(delta_chi2 - delta_chi2_ideal) for delta_chi2 in delta_chi2_vals]
-    opt_idx = np.nanargmin(obj_vals)
-
-    # If opt_idx is the largest value, then re-run this bin with larger regul values.
-    cnt = 2
-    while regul_vals[opt_idx] == np.nanmax(regul_vals) and np.nanmax(regul_vals) < 5e3:
         # Input arguments
-        regul_vals = np.linspace(np.nanmax(regul_vals), np.nanmax(regul_vals) + 1000, 11)
         args_list = [
             [
                 templates, spec_log, spec_err_log, noise_scaling_factor,
@@ -658,241 +576,312 @@ else:
         ]
 
         # Run in parallel
-        print("Re-running ppxf on {} threads (iteration {})...".format(nthreads, cnt))
+        nthreads = min(multiprocessing.cpu_count(), len(args_list))
+        print("Running ppxf on {} threads...".format(nthreads))
         pool = multiprocessing.Pool(nthreads)
         pps = list(pool.map(ppxf_helper, args_list))
         pool.close()
         pool.join()
 
         # Determine which is the optimal regul value
+        # Quite certain this is correct - see here: https://pypi.org/project/ppxf/#how-to-set-regularization
         regul_vals = [p.regul for p in pps]  # Redefining as pool may not retain the order of the input list
         delta_chi2_vals = [(p.chi2 - 1) * len(good_px) for p in pps]
         obj_vals = [np.abs(delta_chi2 - delta_chi2_ideal) for delta_chi2 in delta_chi2_vals]
         opt_idx = np.nanargmin(obj_vals)
-        cnt += 1
 
-    pp_age_met = pps[opt_idx]
+        # If opt_idx is the largest value, then re-run this bin with larger regul values.
+        cnt = 2
+        while regul_vals[opt_idx] == np.nanmax(regul_vals) and np.nanmax(regul_vals) < 5e3:
+            # Input arguments
+            regul_vals = np.linspace(np.nanmax(regul_vals), np.nanmax(regul_vals) + 1000, 11)
+            args_list = [
+                [
+                    templates, spec_log, spec_err_log, noise_scaling_factor,
+                    velscale, start_age_met, good_px, nmoments_age_met, adegree_age_met,
+                    mdegree_age_met, dv, lambda_vals_log, regul, reddening_fm07,
+                    reg_dim, kinematic_components, gas_component, gas_names,
+                    gas_reddening
+                ] for regul in regul_vals
+            ]
 
-##########################################################################
-# Use pPXF to fit the stellar kinematics
-##########################################################################
-pp_kin = ppxf(templates=stars_templates_log,
-              galaxy=spec_log - pp_age_met.gas_bestfit, noise=spec_err_log * noise_scaling_factor,
-              velscale=np.squeeze(velscale), start=start_kin,
-              goodpixels=good_px,
-              moments=nmoments_kin, degree=adegree_kin, mdegree=mdegree_kin,
-              vsyst=dv,
-              lam=np.exp(lambda_vals_log),
-              method="capfit")
-print("Formal errors:")
-print("     dV    dsigma   dh3      dh4")
-print("".join("%8.2g" % f for f in pp_kin.error * np.sqrt(pp_kin.chi2)))
-print("Elapsed time in pPXF: %.2f s" % (time() - t))
+            # Run in parallel
+            print("Re-running ppxf on {} threads (iteration {})...".format(nthreads, cnt))
+            pool = multiprocessing.Pool(nthreads)
+            pps = list(pool.map(ppxf_helper, args_list))
+            pool.close()
+            pool.join()
 
-##########################################################################
-# Reddening
-##########################################################################
-# Calculate the A_V
-if not tie_balmer and grating == "COMB":
-    intrinsic_ratios = {
-        "Halpha/Hbeta": 2.85,
-        "Hgamma/Hbeta": 0.468,
-        "Hdelta/Hbeta": 0.259,
-    }
-    balmer_line_waves = {
-        "Hdelta": 4101.734,
-        "Hgamma": 4340.464,
-        "Hbeta": 4861.325,
-        "Halpha": 6562.800,
-    }
+            # Determine which is the optimal regul value
+            regul_vals = [p.regul for p in pps]  # Redefining as pool may not retain the order of the input list
+            delta_chi2_vals = [(p.chi2 - 1) * len(good_px) for p in pps]
+            obj_vals = [np.abs(delta_chi2 - delta_chi2_ideal) for delta_chi2 in delta_chi2_vals]
+            opt_idx = np.nanargmin(obj_vals)
+            cnt += 1
 
-    for line_1, line_2 in [["Hgamma", "Hbeta"], ["Hdelta", "Hbeta"]]:
-        # From p. 384 of D&S
-        intrinsic_ratio = intrinsic_ratios[line_1 + "/" + line_2]
+        pp_age_met = pps[opt_idx]
 
-        lfmap_1 = pp_age_met.gas_flux[list(gas_names).index(line_1)] * norm
-        lfmap_1_err = pp_age_met.gas_flux_error[list(
-            gas_names).index(line_1)] * norm
+    ##########################################################################
+    # Use pPXF to fit the stellar kinematics
+    ##########################################################################
+    pp_kin = ppxf(templates=stars_templates_log,
+                  galaxy=spec_log - pp_age_met.gas_bestfit, noise=spec_err_log * noise_scaling_factor,
+                  velscale=np.squeeze(velscale), start=start_kin,
+                  goodpixels=good_px,
+                  moments=nmoments_kin, degree=adegree_kin, mdegree=mdegree_kin,
+                  vsyst=dv,
+                  lam=np.exp(lambda_vals_log),
+                  method="capfit")
+    print("Formal errors:")
+    print("     dV    dsigma   dh3      dh4")
+    print("".join("%8.2g" % f for f in pp_kin.error * np.sqrt(pp_kin.chi2)))
+    print("Elapsed time in pPXF: %.2f s" % (time() - t))
 
-        lfmap_2 = pp_age_met.gas_flux[list(gas_names).index(line_2)] * norm
-        lfmap_2_err = pp_age_met.gas_flux_error[list(
-            gas_names).index(line_2)] * norm
+    ##########################################################################
+    # Reddening
+    ##########################################################################
+    # Calculate the A_V
+    if not tie_balmer and grating == "COMB":
+        intrinsic_ratios = {
+            "Halpha/Hbeta": 2.85,
+            "Hgamma/Hbeta": 0.468,
+            "Hdelta/Hbeta": 0.259,
+        }
+        balmer_line_waves = {
+            "Hdelta": 4101.734,
+            "Hgamma": 4340.464,
+            "Hbeta": 4861.325,
+            "Halpha": 6562.800,
+        }
 
-        ratio = lfmap_1 / lfmap_2
-        ratio_err = ratio * ((lfmap_1_err / lfmap_1) **
-                             2 + (lfmap_2_err / lfmap_2)**2)**(0.5)
-        ratio_SNR = ratio / ratio_err
+        for line_1, line_2 in [["Hgamma", "Hbeta"], ["Hdelta", "Hbeta"]]:
+            # From p. 384 of D&S
+            intrinsic_ratio = intrinsic_ratios[line_1 + "/" + line_2]
 
-        E_ba = 2.5 * (np.log10(ratio)) - 2.5 * np.log10(intrinsic_ratio)
-        E_ba_err = 2.5 / np.log(10) * ratio_err / ratio
+            lfmap_1 = pp_age_met.gas_flux[list(gas_names).index(line_1)] * norm
+            lfmap_1_err = pp_age_met.gas_flux_error[list(
+                gas_names).index(line_1)] * norm
 
-        # Calculate ( A(Ha) - A(Hb) ) / E(B-V) from extinction curve
-        R_V = 3.1
-        wave_1_A = np.array([balmer_line_waves[line_1]])
-        wave_2_A = np.array([balmer_line_waves[line_2]])
+            lfmap_2 = pp_age_met.gas_flux[list(gas_names).index(line_2)] * norm
+            lfmap_2_err = pp_age_met.gas_flux_error[list(
+                gas_names).index(line_2)] * norm
 
-        # A_V is a multiplicative scale factor for the extinction curve.
-        # So the below calculation is the same regardless of A_V because
-        # we normalise by it.
-        E_ba_over_E_BV = float(extinction.fm07(wave_2_A, a_v=1.0) -
-                               extinction.fm07(wave_1_A, a_v=1.0)) /\
-            1.0 * R_V
+            ratio = lfmap_1 / lfmap_2
+            ratio_err = ratio * ((lfmap_1_err / lfmap_1) **
+                                 2 + (lfmap_2_err / lfmap_2)**2)**(0.5)
+            ratio_SNR = ratio / ratio_err
 
-        # Calculate E(B-V)
-        E_BV = 1 / E_ba_over_E_BV * E_ba
-        E_BV_err = 1 / E_ba_over_E_BV * E_ba_err
+            E_ba = 2.5 * (np.log10(ratio)) - 2.5 * np.log10(intrinsic_ratio)
+            E_ba_err = 2.5 / np.log(10) * ratio_err / ratio
 
-        # Calculate A(V)
-        A_V = R_V * E_BV
-        A_V_err = R_V * E_BV_err
+            # Calculate ( A(Ha) - A(Hb) ) / E(B-V) from extinction curve
+            R_V = 3.1
+            wave_1_A = np.array([balmer_line_waves[line_1]])
+            wave_2_A = np.array([balmer_line_waves[line_2]])
 
-        print(
-            "-----------------------------------------------------------------------")
-        print("Estimated mean A_V for integrated spectrum using ratio " +
-              line_1 + "/" + line_2 + " (pPXF):")
-        print("A_V = {:6.4f} +/- {:6.4f}".format(A_V, A_V_err))
-        print(
-            "-----------------------------------------------------------------------")
-elif tie_balmer and grating == "COMB":
+            # A_V is a multiplicative scale factor for the extinction curve.
+            # So the below calculation is the same regardless of A_V because
+            # we normalise by it.
+            E_ba_over_E_BV = float(extinction.fm07(wave_2_A, a_v=1.0) -
+                                   extinction.fm07(wave_1_A, a_v=1.0)) /\
+                1.0 * R_V
+
+            # Calculate E(B-V)
+            E_BV = 1 / E_ba_over_E_BV * E_ba
+            E_BV_err = 1 / E_ba_over_E_BV * E_ba_err
+
+            # Calculate A(V)
+            A_V = R_V * E_BV
+            A_V_err = R_V * E_BV_err
+
+            print(
+                "-----------------------------------------------------------------------")
+            print("Estimated mean A_V for integrated spectrum using ratio " +
+                  line_1 + "/" + line_2 + " (pPXF):")
+            print("A_V = {:6.4f} +/- {:6.4f}".format(A_V, A_V_err))
+            print(
+                "-----------------------------------------------------------------------")
+    elif tie_balmer and grating == "COMB":
+        print("-----------------------------------------------------------------------")
+        print("Estimated mean A_V for integrated spectrum using all Balmer lines (calculated by pPXF):")
+        print("A_V = {:6.4f}".format(pp_age_met.gas_reddening * 3.1))
+        print("-----------------------------------------------------------------------")
+    else:
+        print("------------------------------------------------------------------------------")
+        print("Reddening not calculated due to insufficient Balmer lines in wavelength range")
+        print("------------------------------------------------------------------------------")
+
+
+    ##########################################################################
+    # Print emission line fluxes
+    ##########################################################################
+    print("pPXF emission line fluxes")
     print("-----------------------------------------------------------------------")
-    print("Estimated mean A_V for integrated spectrum using all Balmer lines (calculated by pPXF):")
-    print("A_V = {:6.4f}".format(pp_age_met.gas_reddening * 3.1))
-    print("-----------------------------------------------------------------------")
-else:
-    print("------------------------------------------------------------------------------")
-    print("Reddening not calculated due to insufficient Balmer lines in wavelength range")
-    print("------------------------------------------------------------------------------")
+    # NOTE: since the input spectrum is in units of erg/s/cm2/A, these fluxes 
+    # need to be multilpied by the spectral pixel width in Angstroms to get the 
+    # flux in units of erg/s/cm2.
+    for name, flux, flux_error in zip(pp_age_met.gas_names,
+                                      pp_age_met.gas_flux,
+                                      pp_age_met.gas_flux_error):
+        try:
+            print("{:} \t & {:} \\\\".format(
+                name, sci_notation(flux * norm, flux_error * norm)))
+        except:
+            pass
 
+    ##########################################################################
+    # Template weights
+    ##########################################################################
+    weights_age_met = pp_age_met.weights
+    weights_age_met = np.reshape(
+        weights_age_met[~gas_component], (nmetals, nages))
+    weights_age_met /= np.nansum(weights_age_met)
 
-##########################################################################
-# Print emission line fluxes
-##########################################################################
-print("pPXF emission line fluxes")
-print("-----------------------------------------------------------------------")
-# NOTE: since the input spectrum is in units of erg/s/cm2/A, these fluxes 
-# need to be multilpied by the spectral pixel width in Angstroms to get the 
-# flux in units of erg/s/cm2.
-for name, flux, flux_error in zip(pp_age_met.gas_names,
-                                  pp_age_met.gas_flux,
-                                  pp_age_met.gas_flux_error):
-    try:
-        print("{:} \t & {:} \\\\".format(
-            name, sci_notation(flux * norm, flux_error * norm)))
-    except:
-        pass
+    weights_kin = pp_kin.weights
+    weights_kin = np.reshape(weights_kin, (nmetals, nages))
+    weights_kin /= np.nansum(weights_kin)
 
-##########################################################################
-# Template weights
-##########################################################################
-weights_age_met = pp_age_met.weights
-weights_age_met = np.reshape(
-    weights_age_met[~gas_component], (nmetals, nages))
-weights_age_met /= np.nansum(weights_age_met)
+    ##########################################################################
+    # Mass-weighted ages
+    ##########################################################################
+    # Reshape the normalisation factors into the same shape as the ppxf weights
+    weights_light_weighted = pp_age_met.weights
+    weights_light_weighted = np.reshape(
+        weights_light_weighted[~pp_age_met.gas_component], (nmetals, nages))
 
-weights_kin = pp_kin.weights
-weights_kin = np.reshape(weights_kin, (nmetals, nages))
-weights_kin /= np.nansum(weights_kin)
+    # Convert the light-weighted ages into mass-weighted ages
+    weights_mass_weighted = weights_light_weighted * norm / stellar_template_norms
 
-##########################################################################
-# Plotting the fit
-##########################################################################
-if plotit:
-    # Histogram
-    m = ax_hist.imshow(weights_age_met, cmap="magma_r",
-                       origin="lower", aspect="auto")
-    fig_spec.colorbar(m, cax=cbarax)
-    ax_hist.set_yticks(range(len(metallicities)))
-    ax_hist.set_yticklabels(["{:.3f}".format(met / 0.02)
-                             for met in metallicities])
-    ax_hist.set_ylabel(r"Metallicity ($Z_\odot$)")
-    cbarax.set_ylabel("Relative fraction")
-    ax_hist.set_xticks(range(len(ages)))
-    ax_hist.set_xlabel("Age (Myr)")
-    ax_hist.set_title("Best fit stellar population")
-    ax_hist.set_xticklabels(["{:}".format(age / 1e6)
-                             for age in ages], rotation="vertical")
+    # Compute total mass in this bin
+    mass_tot = np.nansum(weights_mass_weighted)
 
-    # Kinematic and age & metallicity fits
-    ax_age_met.clear()
-    ax_kin.clear()
-    ppxf_plot(pp_age_met, ax_age_met)
-    ppxf_plot(pp_kin, ax_kin)
-    ax_age_met.set_title("ppxf fit (age \& metallicity)")
-    ax_kin.set_title(r"ppxf fit (kinematics); $v = %.2f$ km s$^{-1}$, $\sigma = %.2f$ km s$^{-1}$" % (
-        pp_kin.sol[0] - v_sys, pp_kin.sol[1]))
+    # Sum in metallicity to get an age vector.
+    age_vec = np.nansum(weights_mass_weighted, axis=0)
 
-    fig_spec.canvas.draw()
+    ##########################################################################
+    # Plotting the fit
+    ##########################################################################
+    if plotit:
+        fig_spec = plt.figure(figsize=(20, 12))
+        ax_hist = fig_spec.add_axes([0.1, 0.05, 0.8, 0.2])
+        ax_1dhist = fig_spec.add_axes([0.1, 0.25, 0.8, 0.2])
+        ax_kin = fig_spec.add_axes([0.1, 0.55, 0.8, 0.2])
+        ax_age_met = fig_spec.add_axes([0.1, 0.75, 0.8, 0.2])
+        cbarax = fig_spec.add_axes([0.9, 0.05, 0.02, 0.2])
 
-    # Write to file
-    pp.savefig(fig_spec)
+        # Open the pdf file
+        pp = PdfPages(fig_fname)
 
-    if auto_adjust_regul:
-        ax_regul.clear()
-        ax_regul.plot(regul_vals, obj_vals, "bo")
-        ax_regul.plot(regul_vals[np.nanargmin(obj_vals)], obj_vals[np.nanargmin(obj_vals)], "ro", label="Optimal fit")
-        ax_regul.axhline(0, color="gray")
-        ax_regul.set_title("Integrated spectrum")
-        ax_regul.set_xlabel("Regularisation parameter")
-        ax_regul.set_ylabel(r"$\Delta\chi_{\rm goal}^2 - \Delta\chi^2$")
-        ax_regul.legend()
-        fig_regul.canvas.draw()
-        pp_regul.savefig(fig_regul)
+        # Figure for auto_adjust_regul
+        if auto_adjust_regul:
+            fig_regul, ax_regul = plt.subplots()
+            pp_regul = PdfPages(fig_regul_fname)
 
-    plt.show()
+        # Star formation history
+        ax_1dhist.semilogy(age_vec)
+        ax_1dhist.set_ylabel(r"Mass ($\rm M_\odot$)")
+        ax_1dhist.set_title("Star formation history")
+        ax_1dhist.autoscale(axis="x", enable=True, tight=True)
+        ax_1dhist.set_xticklabels([])
 
-# Close the PDF files
-if plotit:
-    pp.close()
-    if auto_adjust_regul:
-        pp_regul.close()
+        # Histogram
+        m = ax_hist.imshow(np.log10(weights_mass_weighted), cmap="cubehelix_r", origin="lower", aspect="auto", vmin=0, vmax=np.nanmax(np.log10(weights_mass_weighted)))
+        fig_spec.colorbar(m, cax=cbarax)
+        ax_hist.set_yticks(range(len(metallicities)))
+        ax_hist.set_yticklabels(["{:.3f}".format(met / 0.02)
+                                 for met in metallicities])
+        ax_hist.set_ylabel(r"Metallicity ($Z_\odot$)")
+        cbarax.set_ylabel(r"Mass $\log_{10}(\rm M_\odot)$")
+        ax_hist.set_xticks(range(len(ages)))
+        ax_hist.set_xlabel("Age (Myr)")
+        ax_hist.set_title("Best fit stellar population")
+        ax_hist.set_xticklabels(["{:}".format(age / 1e6) for age in ages], rotation="vertical")
 
-##########################################################################
-# Save to FITS file
-##########################################################################
-hdulist = []
-hdulist.append(fits.PrimaryHDU())
-hdulist[0].header['NAXIS'] = 1
-hdulist[0].header['OBJECT'] = obj_name
-hdulist[0].header['FNAME'] = input_fits_fname
-hdulist[0].header['ISOCHRN'] = isochrones
-hdulist[0].header['REGUL'] = regul
-hdulist[0].header["NRE"] = r
+        # Kinematic and age & metallicity fits
+        ax_age_met.clear()
+        ax_kin.clear()
+        ppxf_plot(pp_age_met, ax_age_met)
+        ppxf_plot(pp_kin, ax_kin)
+        ax_age_met.text(x=0.5, y=0.9, horizontalalignment="center", transform=ax_age_met.transAxes, s=r"\texttt{ppxf} fit (age and metallicity)")
+        ax_kin.text(x=0.5, y=0.9, horizontalalignment="center", transform=ax_kin.transAxes, s=r"\texttt{ppxf} fit (kinematics); $v_* - v_{\rm sys} = %.2f$ km s$^{-1}$, $\sigma_* = %.2f$ km s$^{-1}$" % (pp_kin.sol[0] - v_sys, pp_kin.sol[1]))
+        ax_age_met.set_xticklabels([])
+        ax_age_met.set_xlabel("")
+        ax_age_met.set_title(obj_name)
+        ax_age_met.autoscale(axis="x", enable=True, tight=True)
+        ax_kin.autoscale(axis="x", enable=True, tight=True)
 
-# Wavelength information
-# Because the FITS standard only allows linear axis values, we store the 
-# log of the rebinned wavelength values since these will be evenly spaced.
-hdulist[0].header['NAXIS1'] = len(lambda_vals_log)
-hdulist[0].header['CRPIX1'] = 1
-hdulist[0].header['CDELT1'] = lambda_vals_log[1] - lambda_vals_log[0]
-hdulist[0].header['CUNIT1'] = 'log Angstroms'
-hdulist[0].header['CTYPE1'] = 'Wavelength'
-hdulist[0].header['CRVAL1'] = lambda_vals_log[0]
+        fig_spec.canvas.draw()
 
-# Storing other information
-hdulist.append(fits.ImageHDU(data=spec_log * norm,  #binned_spec_cube_log,
-                             name="Integrated spectrum (log)"))
-hdulist.append(fits.ImageHDU(data=spec_err_log * norm,
-                             name="Integrated spectrum (log) errors"))
-hdulist.append(fits.ImageHDU(data=(pp_age_met.bestfit - pp_age_met.gas_bestfit) * norm,
-                             name="Best fit spectrum (log)"))
+        # Write to file
+        pp.savefig(fig_spec)
 
-# Other stuff we need to keep
-hdulist[0].header["SNR"] = SNR
-hdulist[0].header["R_V"] = 3.1
-hdulist[0].header["A_V"] = pp_age_met.gas_reddening * 3.1 if pp_age_met.gas_reddening is not None else None
-hdulist[0].header["V"] = pp_kin.sol[0]
-hdulist[0].header["V_ERR"] = pp_kin.error[0]  # NOTE: unreliable error estimate (see ppxf documentation)
-hdulist[0].header["VD"] = pp_kin.sol[1]
-hdulist[0].header["VD_ERR"] = pp_kin.error[1]  # NOTE: unreliable error estimate (see ppxf documentation)
+        if auto_adjust_regul:
+            ax_regul.clear()
+            ax_regul.plot(regul_vals, obj_vals, "bo")
+            ax_regul.plot(regul_vals[np.nanargmin(obj_vals)], obj_vals[np.nanargmin(obj_vals)], "ro", label="Optimal fit")
+            ax_regul.axhline(0, color="gray")
+            ax_regul.set_title("Integrated spectrum")
+            ax_regul.set_xlabel("Regularisation parameter")
+            ax_regul.set_ylabel(r"$\Delta\chi_{\rm goal}^2 - \Delta\chi^2$")
+            ax_regul.legend()
+            fig_regul.canvas.draw()
+            pp_regul.savefig(fig_regul)
 
-# Gas kinematics
-for n in range(1, ncomponents):
-    hdulist[0].header["VG{}".format(n)] = pp_age_met.sol[n][0]
-    hdulist[0].header["VG{}_ERR".format(n)] = pp_age_met.error[n][0]
-    hdulist[0].header["VGD{}".format(n)] = pp_age_met.sol[n][1]
-    hdulist[0].header["VGD{}ERR".format(n)] = pp_age_met.error[n][1]
+        plt.show()
 
-hdulist = fits.HDUList(hdulist)
+    # Close the PDF files
+    if plotit:
+        pp.close()
+        if auto_adjust_regul:
+            pp_regul.close()
 
-# Save to file
-hdulist.writeto(output_fits_fname, overwrite=True)
+    ##########################################################################
+    # Save to FITS file
+    ##########################################################################
+    hdulist = []
+    hdulist.append(fits.PrimaryHDU())
+    hdulist[0].header['NAXIS'] = 1
+    hdulist[0].header['OBJECT'] = obj_name
+    hdulist[0].header['FNAME'] = input_fits_fname
+    hdulist[0].header['ISOCHRN'] = isochrones
+    hdulist[0].header['REGUL'] = regul
+    hdulist[0].header["NRE"] = r
+
+    # Wavelength information
+    # Because the FITS standard only allows linear axis values, we store the 
+    # log of the rebinned wavelength values since these will be evenly spaced.
+    hdulist[0].header['NAXIS1'] = len(lambda_vals_log)
+    hdulist[0].header['CRPIX1'] = 1
+    hdulist[0].header['CDELT1'] = lambda_vals_log[1] - lambda_vals_log[0]
+    hdulist[0].header['CUNIT1'] = 'log Angstroms'
+    hdulist[0].header['CTYPE1'] = 'Wavelength'
+    hdulist[0].header['CRVAL1'] = lambda_vals_log[0]
+
+    # Storing other information
+    hdulist.append(fits.ImageHDU(data=spec_log * norm,  #binned_spec_cube_log,
+                                 name="Integrated spectrum (log)"))
+    hdulist.append(fits.ImageHDU(data=spec_err_log * norm,
+                                 name="Integrated spectrum (log) errors"))
+    hdulist.append(fits.ImageHDU(data=(pp_age_met.bestfit - pp_age_met.gas_bestfit) * norm,
+                                 name="Best fit spectrum (log)"))
+
+    # Other stuff we need to keep
+    hdulist[0].header["SNR"] = SNR
+    hdulist[0].header["R_V"] = 3.1
+    hdulist[0].header["A_V"] = pp_age_met.gas_reddening * 3.1 if pp_age_met.gas_reddening is not None else None
+    hdulist[0].header["V"] = pp_kin.sol[0]
+    hdulist[0].header["V_ERR"] = pp_kin.error[0]  # NOTE: unreliable error estimate (see ppxf documentation)
+    hdulist[0].header["VD"] = pp_kin.sol[1]
+    hdulist[0].header["VD_ERR"] = pp_kin.error[1]  # NOTE: unreliable error estimate (see ppxf documentation)
+
+    # Gas kinematics
+    for n in range(1, ncomponents):
+        hdulist[0].header["VG{}".format(n)] = pp_age_met.sol[n][0]
+        hdulist[0].header["VG{}_ERR".format(n)] = pp_age_met.error[n][0]
+        hdulist[0].header["VGD{}".format(n)] = pp_age_met.sol[n][1]
+        hdulist[0].header["VGD{}ERR".format(n)] = pp_age_met.error[n][1]
+
+    hdulist = fits.HDUList(hdulist)
+
+    # Save to file
+    hdulist.writeto(output_fits_fname, overwrite=True)
