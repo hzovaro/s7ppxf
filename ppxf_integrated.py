@@ -27,6 +27,7 @@ from scipy import constants, ndimage
 import numpy as np
 import extinction
 from itertools import product
+import multiprocessing
 
 from ppxf.ppxf import ppxf
 import ppxf.ppxf_util as util
