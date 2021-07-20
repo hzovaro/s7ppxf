@@ -43,8 +43,8 @@ from IPython.core.debugger import Tracer
 ##############################################################################
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_pdf import PdfPages
-matplotlib.rc("font", size=10)
-matplotlib.rc("text", usetex=True)
+matplotlib.rc("font", size=14)
+matplotlib.rc("text", usetex=False)
 matplotlib.rc("font", **{"family": "serif"})
 matplotlib.rc("image", interpolation="nearest")
 matplotlib.rc("image", origin="lower")
@@ -147,8 +147,8 @@ r = 5  # radius of aperture in arcsec
 # ppxf options
 ngascomponents = 2  # Number of kinematic components to be fitted to the emission lines
 isochrones = "Padova"
-auto_adjust_regul = True  # Set to False for interactive execution
-mask_NaD = True  # Whether to mask out the Na D doublet - leave False for now
+auto_adjust_regul = False  # Set to False for interactive execution
+mask_NaD = False  # Whether to mask out the Na D doublet - leave False for now
 
 ##############################################################################
 # Object information
@@ -240,9 +240,9 @@ for obj_name in sys.argv[1:]:
         "{}_ppxf_{}_{}_{}_r={}as_ngascomponents={}.fits".format(obj_name, grating, fname_str, isochrones, r, ncomponents - 1))
 
     if mask_NaD:
-        fig_fname = fig_fname.replace("ppxf", "ppxf_mask_NaD")
-        fig_regul_fname = fig_regul_fname.replace("ppxf", "ppxf_mask_NaD")
-        output_fits_fname = output_fits_fname.replace("ppxf", "ppxf_mask_NaD")
+        fig_fname = fig_fname.replace("{}_ppxf".format(obj_name), "{}_ppxf_mask_NaD".format(obj_name))
+        fig_regul_fname = fig_regul_fname.replace("{}_ppxf".format(obj_name), "{}_ppxf_mask_NaD".format(obj_name))
+        output_fits_fname = output_fits_fname.replace("{}_ppxf".format(obj_name), "{}_ppxf_mask_NaD".format(obj_name))
 
     print("---------------------------------------------------------------------")
     print("FILE NAMES")
@@ -340,8 +340,8 @@ for obj_name in sys.argv[1:]:
     for ssp_template_fname in ssp_template_fnames:
         f = np.load(os.path.join(ssp_template_path, ssp_template_fname))
         metallicities.append(f["metallicity"].item())
-        ages = f["ages"]
-        spectra_ssp_linear = f["L_vals"]
+        ages = f["ages"][:-2]
+        spectra_ssp_linear = f["L_vals"][:, :-2]
         lambda_vals_ssp_linear = f["lambda_vals_A"]
 
         # Extract the wavelength range and logarithmically rebin one spectrum
@@ -760,12 +760,17 @@ for obj_name in sys.argv[1:]:
     age_vec = np.nansum(weights_mass_weighted, axis=0)
 
     ##########################################################################
+    # Insert your own code here to do stuff with the SFH 
+    # (e.g. calculate the mass-weighted mean age etc.)
+    ##########################################################################
+
+    ##########################################################################
     # Plotting the fit
     ##########################################################################
     if plotit:
         fig_spec = plt.figure(figsize=(20, 12))
-        ax_hist = fig_spec.add_axes([0.1, 0.05, 0.8, 0.2])
-        ax_1dhist = fig_spec.add_axes([0.1, 0.25, 0.8, 0.2])
+        ax_hist = fig_spec.add_axes([0.1, 0.1, 0.8, 0.2])
+        ax_1dhist = fig_spec.add_axes([0.1, 0.3, 0.8, 0.2])
         ax_kin = fig_spec.add_axes([0.1, 0.55, 0.8, 0.2])
         ax_age_met = fig_spec.add_axes([0.1, 0.75, 0.8, 0.2])
         cbarax = fig_spec.add_axes([0.9, 0.05, 0.02, 0.2])
@@ -781,7 +786,7 @@ for obj_name in sys.argv[1:]:
         # Star formation history
         ax_1dhist.semilogy(age_vec)
         ax_1dhist.set_ylabel(r"Mass ($\rm M_\odot$)")
-        ax_1dhist.set_title("Star formation history")
+        ax_1dhist.text(x=0.5, y=0.9, s="Star formation history", transform=ax_1dhist.transAxes, horizontalalignment="center")
         ax_1dhist.autoscale(axis="x", enable=True, tight=True)
         ax_1dhist.set_xticklabels([])
 
@@ -803,8 +808,8 @@ for obj_name in sys.argv[1:]:
         ax_kin.clear()
         ppxf_plot(pp_age_met, ax_age_met)
         ppxf_plot(pp_kin, ax_kin)
-        ax_age_met.text(x=0.5, y=0.9, horizontalalignment="center", transform=ax_age_met.transAxes, s=r"\texttt{ppxf} fit (age and metallicity)")
-        ax_kin.text(x=0.5, y=0.9, horizontalalignment="center", transform=ax_kin.transAxes, s=r"\texttt{ppxf} fit (kinematics); $v_* - v_{\rm sys} = %.2f$ km s$^{-1}$, $\sigma_* = %.2f$ km s$^{-1}$" % (pp_kin.sol[0] - v_sys, pp_kin.sol[1]))
+        ax_age_met.text(x=0.5, y=0.9, horizontalalignment="center", transform=ax_age_met.transAxes, s=r"ppxf fit (age and metallicity)")
+        ax_kin.text(x=0.5, y=0.9, horizontalalignment="center", transform=ax_kin.transAxes, s=r"ppxf fit (kinematics); $v_* - v_{\rm sys} = %.2f$ km s$^{-1}$, $\sigma_* = %.2f$ km s$^{-1}$" % (pp_kin.sol[0] - v_sys, pp_kin.sol[1]))
         ax_age_met.set_xticklabels([])
         ax_age_met.set_xlabel("")
         ax_age_met.set_title(obj_name)
