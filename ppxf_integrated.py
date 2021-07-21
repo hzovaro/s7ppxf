@@ -145,7 +145,7 @@ plotit = True
 r = 5  # radius of aperture in arcsec
 
 # ppxf options
-ngascomponents = 2  # Number of kinematic components to be fitted to the emission lines
+ngascomponents = 3  # Number of kinematic components to be fitted to the emission lines
 isochrones = "Padova"
 auto_adjust_regul = True  # Set to False for interactive execution
 mask_NaD = False  # Whether to mask out the Na D doublet - leave False for now
