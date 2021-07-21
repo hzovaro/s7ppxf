@@ -147,7 +147,7 @@ r = 5  # radius of aperture in arcsec
 # ppxf options
 ngascomponents = 2  # Number of kinematic components to be fitted to the emission lines
 isochrones = "Padova"
-auto_adjust_regul = False  # Set to False for interactive execution
+auto_adjust_regul = True  # Set to False for interactive execution
 mask_NaD = False  # Whether to mask out the Na D doublet - leave False for now
 
 ##############################################################################
@@ -319,6 +319,9 @@ for obj_name in sys.argv[1:]:
     spec_linear = np.nansum(np.nansum(data_cube, axis=1), axis=1) * 4 * np.pi * (D_L_Mpc * 1e6 * 3.086e18)**2  # Needs to be in units of erg/s/A
     spec_err_linear = np.sqrt(np.nansum(np.nansum(var_cube, axis=1), axis=1)) * 4 * np.pi * (D_L_Mpc * 1e6 * 3.086e18)**2  # Needs to be in units of erg/s/A
 
+    fig, ax = plt.subplots(nrows=1, ncols=1)
+    ax.errorbar(x=lambda_vals_linear, y=spec_linear, yerr=spec_err_linear)
+
     # Calculate the SNR
     SNR = np.nanmedian(spec_linear / spec_err_linear)
     print("SNR = {:.4f}".format(SNR))
@@ -431,6 +434,9 @@ for obj_name in sys.argv[1:]:
     if ncomponents == 3:
         kinematic_components = [0] * n_ssp_templates + \
             [1] * len(gas_names) + [2] * len(gas_names)
+    elif ncomponents == 4:
+        kinematic_components = [0] * n_ssp_templates + \
+            [1] * len(gas_names) + [2] * len(gas_names) + [3] * len(gas_names)
     elif ncomponents == 2:
         kinematic_components = [0] * n_ssp_templates + [1] * len(gas_names)
     # gas_component=True for gas templates
@@ -444,8 +450,12 @@ for obj_name in sys.argv[1:]:
     # During the PPXF fit they will be assigned a different kinematic
     # COMPONENT value
     if ncomponents > 2:
-        gas_templates = np.concatenate((gas_templates, gas_templates), axis=1)
-        gas_names = np.concatenate((gas_names, gas_names))
+        if ngascomponents == 2:
+            gas_templates = np.concatenate((gas_templates, gas_templates), axis=1)
+            gas_names = np.concatenate((gas_names, gas_names))
+        if ngascomponents == 3:
+            gas_templates = np.concatenate((gas_templates, gas_templates, gas_templates), axis=1)
+            gas_names = np.concatenate((gas_names, gas_names, gas_names))
         eline_lambdas = np.concatenate((eline_lambdas, eline_lambdas))
 
     gas_names_new = []
@@ -577,7 +587,7 @@ for obj_name in sys.argv[1:]:
         ]
 
         # Run in parallel
-        nthreads = min(multiprocessing.cpu_count(), len(args_list))
+        nthreads = 20 # min(multiprocessing.cpu_count(), len(args_list))
         print("Running ppxf on {} threads...".format(nthreads))
         pool = multiprocessing.Pool(nthreads)
         pps = list(pool.map(ppxf_helper, args_list))
@@ -773,7 +783,7 @@ for obj_name in sys.argv[1:]:
         ax_1dhist = fig_spec.add_axes([0.1, 0.3, 0.8, 0.2])
         ax_kin = fig_spec.add_axes([0.1, 0.55, 0.8, 0.2])
         ax_age_met = fig_spec.add_axes([0.1, 0.75, 0.8, 0.2])
-        cbarax = fig_spec.add_axes([0.9, 0.05, 0.02, 0.2])
+        cbarax = fig_spec.add_axes([0.9, 0.1, 0.02, 0.2])
 
         # Open the pdf file
         pp = PdfPages(fig_fname)
