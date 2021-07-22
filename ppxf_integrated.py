@@ -150,6 +150,11 @@ mask_NaD = False  # Whether to mask out the Na D doublet - leave False for now
 
 ##############################################################################
 # Object information
+gals = ["NGC1068", "IC5063"]
+t_end_of_SB_list = []
+t_start_of_SB_list = []
+df_output  = pd.DataFrame(index=gals)
+
 for obj_name in sys.argv[1:]:
     ##############################################################################
     # Paths and filenames
@@ -771,12 +776,33 @@ for obj_name in sys.argv[1:]:
     mass_tot = np.nansum(weights_mass_weighted)
 
     # Sum in metallicity to get an age vector.
-    age_vec = np.nansum(weights_mass_weighted, axis=0)
+    weights_mass_weighted_metallicity_summed = np.nansum(weights_mass_weighted, axis=0)
+    np.save(os.path.join(data_dir, f"{obj_name}_mass_weights.npy"), weights_mass_weighted_metallicity_summed)
+    np.save(os.path.join(data_dir, f"ppxf_ages.npy"), ages)
+    # When you load this, you must use the pickle option:
+    #    np.load(os.path.join(data_dir, f"{obj_name}_mass_weights.npy"), allow_pickle=True)
 
     ##########################################################################
     # Insert your own code here to do stuff with the SFH 
     # (e.g. calculate the mass-weighted mean age etc.)
     ##########################################################################
+    # Case: star formation is still ongoing
+    if weights_mass_weighted_metallicity_summed[0] > 0:
+        idx_end_of_SB = 0
+        idx_start_of_SB = np.argwhere(weights_mass_weighted_metallicity_summed == 0)[0][0]
+        t_start_of_SB = ages[weights_mass_weighted_metallicity_summed == 0][0] / 1e6  # in Myr
+        t_end_of_SB = 0
+    else:
+        # Other case: star formation has ceased
+        idx_end_of_SB = np.argwhere(weights_mass_weighted_metallicity_summed == 0)[0][0]
+        idx_start_of_SB = np.argwhere(weights_mass_weighted_metallicity_summed == 0)[1][0]
+        t_end_of_SB = ages[weights_mass_weighted_metallicity_summed == 0][0] / 1e6  # in Myr
+        t_start_of_SB = ages[weights_mass_weighted_metallicity_summed == 0][1] / 1e6  # in Myr
+
+    # t_start_of_SB_list.append(t_start_of_SB)
+    # t_end_of_SB_list.append(t_end_of_SB)
+    df_output.loc[obj_name, "t_start_of_SB"] = t_start_of_SB
+    df_output.loc[obj_name, "t_end_of_SB"] = t_end_of_SB
 
     ##########################################################################
     # Plotting the fit
@@ -803,6 +829,8 @@ for obj_name in sys.argv[1:]:
         ax_1dhist.text(x=0.5, y=0.9, s="Star formation history", transform=ax_1dhist.transAxes, horizontalalignment="center")
         ax_1dhist.autoscale(axis="x", enable=True, tight=True)
         ax_1dhist.set_xticklabels([])
+        ax_1dhist.axvline(idx_end_of_SB, color="gray")
+        ax_1dhist.axvline(idx_start_of_SB, color="gray")
 
         # Histogram
         m = ax_hist.imshow(np.log10(weights_mass_weighted), cmap="cubehelix_r", origin="lower", aspect="auto", vmin=0, vmax=np.nanmax(np.log10(weights_mass_weighted)))
@@ -905,3 +933,8 @@ for obj_name in sys.argv[1:]:
 
     # Save to file
     hdulist.writeto(output_fits_fname, overwrite=True)
+
+    # Save .csv file
+    df_output.to_csv("filename.csv")
+
+
