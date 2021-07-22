@@ -45,7 +45,7 @@ datacube_r = hdulist_R7000[0].data
 varcube_r = hdulist_R7000[1].data
 
 # Get the approx. centre coordinates of the galaxy
-y_0_px, x_0_px = np.unravel_index(np.nanargmax(np.nanmean(datacube_r, axis=0)), shape=datacube_r.shape[1:])
+y_0_px, x_0_px = np.unravel_index(np.nanargmax(np.nanmedian(datacube_r, axis=0)), shape=datacube_r.shape[1:])
 
 # Spatial information
 N_lambda_b, nrows, ncols = datacube_b.shape
