@@ -28,6 +28,7 @@ import numpy as np
 import extinction
 from itertools import product
 import multiprocessing
+import pandas as pd
 
 from ppxf.ppxf import ppxf
 import ppxf.ppxf_util as util
@@ -141,13 +142,10 @@ bad_pixel_ranges_A = []  # Spectral regions to mask out (in Angstroms). format: 
 savefigs = True
 plotit = True
 
-# Binning settings
-r = 5  # radius of aperture in arcsec
-
 # ppxf options
 ngascomponents = 3  # Number of kinematic components to be fitted to the emission lines
 isochrones = "Padova"
-auto_adjust_regul = True  # Set to False for interactive execution
+auto_adjust_regul = False  # Set to False for interactive execution
 mask_NaD = False  # Whether to mask out the Na D doublet - leave False for now
 
 ##############################################################################
@@ -186,6 +184,13 @@ for obj_name in sys.argv[1:]:
     kpc_per_as = D_A_Mpc * 1e3 * np.pi / 180.0 / 3600.0
     c_km_s = constants.c / 1e3
     vel = c_km_s * np.log(1 + z) # Starting guess for systemic velocity (eq.(8) of Cappellari (2017))
+
+    # load the S7 catalogue
+    df_metadata = pd.read_csv(os.path.join(data_dir, "s7_metadata.csv"), comment="$")
+    df_metadata = df_metadata.set_index("S7_Name")
+    r = df_metadata.loc[obj_name, "HL_Re"]   # radius of aperture in arcsec
+    x_0 = df_metadata.loc[obj_name, "S7_nucleus_index_x"]
+    y_0 = df_metadata.loc[obj_name, "S7_nucleus_index_y"]
 
     # Extinction
     t = IrsaDust.get_query_table(obj_name, radius="2deg")
@@ -304,7 +309,6 @@ for obj_name in sys.argv[1:]:
         data_cube.shape[2]), indexing='ij')
 
     # Mask out spaxels beyond the given radius
-    y_0, x_0 = np.unravel_index(np.nanargmax(np.nanmedian(data_cube, axis=0)), data_cube.shape[1:])
     aperture = (xx - x_0)**2 + (yy - y_0)**2 < r**2
 
     im = np.nansum(data_cube, axis=0)
@@ -319,8 +323,8 @@ for obj_name in sys.argv[1:]:
     spec_linear = np.nansum(np.nansum(data_cube, axis=1), axis=1) * 4 * np.pi * (D_L_Mpc * 1e6 * 3.086e18)**2  # Needs to be in units of erg/s/A
     spec_err_linear = np.sqrt(np.nansum(np.nansum(var_cube, axis=1), axis=1)) * 4 * np.pi * (D_L_Mpc * 1e6 * 3.086e18)**2  # Needs to be in units of erg/s/A
 
-    fig, ax = plt.subplots(nrows=1, ncols=1)
-    ax.errorbar(x=lambda_vals_linear, y=spec_linear, yerr=spec_err_linear)
+    # fig, ax = plt.subplots(nrows=1, ncols=1)
+    # ax.errorbar(x=lambda_vals_linear, y=spec_linear, yerr=spec_err_linear)
 
     # Calculate the SNR
     SNR = np.nanmedian(spec_linear / spec_err_linear)
