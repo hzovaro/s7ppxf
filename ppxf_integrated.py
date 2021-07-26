@@ -139,7 +139,7 @@ grating = "COMB"
 bad_pixel_ranges_A = []  # Spectral regions to mask out (in Angstroms). format: [[lambda_1, lambda_2], ...]
 
 # Plotting settings
-savefigs = True
+savefigs = False
 plotit = True
 
 # ppxf options
@@ -150,12 +150,12 @@ mask_NaD = False  # Whether to mask out the Na D doublet - leave False for now
 
 ##############################################################################
 # Object information
-gals = ["NGC1068", "IC5063"]
+gals = ["ESO323-G77"]
 t_end_of_SB_list = []
 t_start_of_SB_list = []
 df_output  = pd.DataFrame(index=gals)
 
-for obj_name in sys.argv[1:]:
+for obj_name in gals:
     ##############################################################################
     # Paths and filenames
     ##############################################################################
@@ -261,7 +261,8 @@ for obj_name in sys.argv[1:]:
     print("Regul figures:\t\t{}".format(fig_regul_fname))
     print("FITS file:\t\t{}".format(output_fits_fname))
     print("---------------------------------------------------------------------")
-    hit_key_to_continue()
+    if not auto_adjust_regul:
+        hit_key_to_continue()
 
     ##############################################################################
     # Open the data cube containing the galaxy spectra
@@ -320,6 +321,8 @@ for obj_name in sys.argv[1:]:
     fig, ax = plt.subplots(nrows=1, ncols=1)
     ax.imshow(im)
     ax.scatter(x=x_0, y=y_0, c="r", s=50)
+
+
 
     data_cube[:, ~aperture] = np.nan
     var_cube[:, ~aperture] = np.nan
@@ -786,23 +789,54 @@ for obj_name in sys.argv[1:]:
     # Insert your own code here to do stuff with the SFH 
     # (e.g. calculate the mass-weighted mean age etc.)
     ##########################################################################
-    # Case: star formation is still ongoing
-    if weights_mass_weighted_metallicity_summed[0] > 0:
-        idx_end_of_SB = 0
-        idx_start_of_SB = np.argwhere(weights_mass_weighted_metallicity_summed == 0)[0][0]
-        t_start_of_SB = ages[weights_mass_weighted_metallicity_summed == 0][0] / 1e6  # in Myr
-        t_end_of_SB = 0
+    if np.all(weights_mass_weighted_metallicity_summed <= 0):
+        print(f"ERROR processing {obj_name}: all weights are <= 0!")
+        t_start_of_SB = np.nan
+        t_end_of_SB = np.nan
+        idx_end_of_SB = np.nan
+        idx_start_of_SB = np.nan
     else:
-        # Other case: star formation has ceased
-        idx_end_of_SB = np.argwhere(weights_mass_weighted_metallicity_summed == 0)[0][0]
-        idx_start_of_SB = np.argwhere(weights_mass_weighted_metallicity_summed == 0)[1][0]
-        t_end_of_SB = ages[weights_mass_weighted_metallicity_summed == 0][0] / 1e6  # in Myr
-        t_start_of_SB = ages[weights_mass_weighted_metallicity_summed == 0][1] / 1e6  # in Myr
+        # Case: star formation is still ongoing
+        if weights_mass_weighted_metallicity_summed[0] > 0:
+            idx_end_of_SB = 0
+            t_end_of_SB = 0
+            if np.any(weights_mass_weighted_metallicity_summed == 0):
+                idx_start_of_SB = np.argwhere(weights_mass_weighted_metallicity_summed == 0)[0][0]
+                t_start_of_SB = ages[weights_mass_weighted_metallicity_summed == 0][0] / 1e6  # in Myr
+            else:
+                idx_start_of_SB = len(ages - 1)
+                t_start_of_SB = ages[-1]
+        else:
+            # Other case: star formation has ceased
+            idx_end_of_SB = np.argwhere(weights_mass_weighted_metallicity_summed == 0)[0][0]
+            t_end_of_SB = ages[weights_mass_weighted_metallicity_summed == 0][0] / 1e6  # in Myr
+            if len(np.argwhere(weights_mass_weighted_metallicity_summed == 0)) >= 2:
+                idx_start_of_SB = np.argwhere(weights_mass_weighted_metallicity_summed == 0)[1][0]        
+                t_start_of_SB = ages[weights_mass_weighted_metallicity_summed == 0][1] / 1e6  # in Myr
+            else:
+                idx_start_of_SB = len(ages - 1)
+                t_start_of_SB = ages[-1]            
 
-    # t_start_of_SB_list.append(t_start_of_SB)
-    # t_end_of_SB_list.append(t_end_of_SB)
-    df_output.loc[obj_name, "t_start_of_SB"] = t_start_of_SB
-    df_output.loc[obj_name, "t_end_of_SB"] = t_end_of_SB
+    # mass-weighted mean stellar age in Myr
+    mass_average_age = (np.nansum(weights_mass_weighted_metallicity_summed * ages) / np.nansum(weights_mass_weighted)) / 1e6
+    
+    mask = np.zeros(ages.shape, dtype="bool")
+    mask[ages > 1.0e8] = True # mask out all the values that have ages larger than 100 Myr or 1e8 yrs 
+    mass_array_below_100Myr = np.ma.masked_array(weights_mass_weighted_metallicity_summed, mask=mask)
+    total_mass_below_100Myr = np.nansum(mass_array_below_100Myr)
+    total_mass_fraction_below_100Myr = total_mass_below_100Myr / mass_tot
+
+    mask = np.zeros(ages.shape, dtype="bool")
+    mask[ages > 2.5e8] = True # mask out all the values that have ages larger than 100 Myr or 1e8 yrs 
+    mass_array_below_250Myr = np.ma.masked_array(weights_mass_weighted_metallicity_summed, mask=mask)
+    total_mass_below_250Myr = np.nansum(mass_array_below_250Myr)
+    total_mass_fraction_below_250Myr = total_mass_below_250Myr / mass_tot
+
+    mask = np.zeros(ages.shape, dtype="bool")
+    mask[ages > 1e9] = True # mask out all the values that have ages larger than 100 Myr or 1e8 yrs 
+    mass_array_below_1Gyr = np.ma.masked_array(weights_mass_weighted_metallicity_summed, mask=mask)
+    total_mass_below_1Gyr = np.nansum(mass_array_below_1Gyr)
+    total_mass_fraction_below_1Gyr = total_mass_below_1Gyr / mass_tot
 
     ##########################################################################
     # Plotting the fit
@@ -824,7 +858,8 @@ for obj_name in sys.argv[1:]:
             pp_regul = PdfPages(fig_regul_fname)
 
         # Star formation history
-        ax_1dhist.semilogy(age_vec)
+        if np.any(weights_mass_weighted_metallicity_summed > 0): 
+            ax_1dhist.semilogy(weights_mass_weighted_metallicity_summed)
         ax_1dhist.set_ylabel(r"Mass ($\rm M_\odot$)")
         ax_1dhist.text(x=0.5, y=0.9, s="Star formation history", transform=ax_1dhist.transAxes, horizontalalignment="center")
         ax_1dhist.autoscale(axis="x", enable=True, tight=True)
@@ -934,7 +969,37 @@ for obj_name in sys.argv[1:]:
     # Save to file
     hdulist.writeto(output_fits_fname, overwrite=True)
 
-    # Save .csv file
-    df_output.to_csv("filename.csv")
+    ##########################################################################
+    # Save to DataFrame in CSV file
+    ##########################################################################
+    df_output.loc[obj_name, "ppxf_success"] = True if np.any(weights_mass_weighted_metallicity_summed > 0) else False
+    df_output.loc[obj_name, "t_start_of_SB (Myr)"] = t_start_of_SB
+    df_output.loc[obj_name, "t_end_of_SB (Myr)"] = t_end_of_SB
+    df_output.loc[obj_name, "mass_average_age (Myr)"] = mass_average_age
+    df_output.loc[obj_name, "total_mass_below_100Myr (M_sun)"] = total_mass_below_100Myr
+    df_output.loc[obj_name, "total_mass_fraction_below_100Myr"] = total_mass_fraction_below_100Myr
+    df_output.loc[obj_name, "total_mass_below_250Myr (M_sun)"] = total_mass_below_250Myr
+    df_output.loc[obj_name, "total_mass_fraction_below_250Myr"] = total_mass_fraction_below_250Myr
+    df_output.loc[obj_name, "mass_tot (M_sun)"] = mass_tot
+
+    for aa, age in enumerate(ages):
+        df_output.loc[obj_name, f"mass (M_sun) in template t = {age / 1e6:.2e} yr"] = weights_mass_weighted_metallicity_summed[aa]
+
+    df_output.loc[obj_name, "SNR"] = SNR
+    df_output.loc[obj_name, "R_V"] = 3.1
+    df_output.loc[obj_name, "A_V"] = pp_age_met.gas_reddening * 3.1 if pp_age_met.gas_reddening is not None else None
+    df_output.loc[obj_name, "stellar_velocity (km/s)"] = pp_kin.sol[0]
+    df_output.loc[obj_name, "stellar_velocity_error (km/s)"] = pp_kin.error[0]  # NOTE: unreliable error estimate (see ppxf documentation)
+    df_output.loc[obj_name, "stellar_velocity_dispersion (km/s)"] = pp_kin.sol[1]
+    df_output.loc[obj_name, "stellar_velocity_dispersion_error (km/s)"] = pp_kin.error[1]  # NOTE: unreliable error estimate (see ppxf documentation)
+
+    # Gas kinematics
+    for n in range(1, ncomponents):
+        df_output.loc[obj_name, "gas_velocity_component_{} (km/s)".format(n)] = pp_age_met.sol[n][0]
+        df_output.loc[obj_name, "gas_velocity_component_{}_error (km/s)".format(n)] = pp_age_met.error[n][0]
+        df_output.loc[obj_name, "gas_velocity_dispersion_component_{} (km/s)".format(n)] = pp_age_met.sol[n][1]
+        df_output.loc[obj_name, "gas_velocity_dispersion_component_{}_error (km/s)".format(n)] = pp_age_met.error[n][1]
+
+    df_output.to_csv(os.path.join(data_dir, "S7_ppxf_data.csv"))
 
 
