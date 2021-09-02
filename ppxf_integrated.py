@@ -145,8 +145,8 @@ plotit = True
 # ppxf options
 ngascomponents = 3  # Number of kinematic components to be fitted to the emission lines
 isochrones = "Padova"
-auto_adjust_regul = False  # Set to False for interactive execution
-mask_NaD = False  # Whether to mask out the Na D doublet - leave False for now
+auto_adjust_regul = True  # Set to False for interactive execution
+mask_NaD = True  # Whether to mask out the Na D doublet - leave False for now
 
 ##############################################################################
 # Object information
@@ -253,6 +253,7 @@ for obj_name in gals:
         fig_fname = fig_fname.replace("{}_ppxf".format(obj_name), "{}_ppxf_mask_NaD".format(obj_name))
         fig_regul_fname = fig_regul_fname.replace("{}_ppxf".format(obj_name), "{}_ppxf_mask_NaD".format(obj_name))
         output_fits_fname = output_fits_fname.replace("{}_ppxf".format(obj_name), "{}_ppxf_mask_NaD".format(obj_name))
+        bad_pixel_ranges_A.append([(5889 - 30) * (1 + z), (5889 + 30) * (1 + z)])    
 
     print("---------------------------------------------------------------------")
     print("FILE NAMES")
